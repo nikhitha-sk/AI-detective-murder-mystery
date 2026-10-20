@@ -23,10 +23,13 @@ const optionalString = z
   .transform((v) => (v && v.trim() ? v.trim() : undefined));
 
 const EnvSchema = z.object({
-  LLM_PROVIDER: z.enum(["auto", "anthropic", "mock"]).default("auto"),
+  LLM_PROVIDER: z.enum(["auto", "groq", "anthropic", "mock"]).default("auto"),
+  GROQ_API_KEY: optionalString,
   ANTHROPIC_API_KEY: optionalString,
-  MODEL_MAIN: z.string().default("claude-opus-5-5"),
-  MODEL_GUARD: z.string().default("claude-haiku-5-5"),
+  // Empty = the provider's default (see DEFAULT_MODELS).
+  MODEL_MAIN: optionalString,
+  MODEL_SUSPECT: optionalString,
+  MODEL_GUARD: optionalString,
   SERVER_PORT: int(4300),
   CLIENT_ORIGIN: z.string().default("http://localhost:3300"),
   REDIS_URL: optionalString,
@@ -42,14 +45,32 @@ const EnvSchema = z.object({
 
 const env = EnvSchema.parse(process.env);
 
-const llmMode: "anthropic" | "mock" =
-  env.LLM_PROVIDER === "auto" ? (env.ANTHROPIC_API_KEY ? "anthropic" : "mock") : env.LLM_PROVIDER;
+const llmMode: "groq" | "anthropic" | "mock" =
+  env.LLM_PROVIDER !== "auto"
+    ? env.LLM_PROVIDER
+    : env.GROQ_API_KEY
+      ? "groq"
+      : env.ANTHROPIC_API_KEY
+        ? "anthropic"
+        : "mock";
+
+/**
+ * main: case generation and solver. suspect: suspect replies. guard: reply guard and summaries.
+ * On Groq, free-tier limits are per model, so spreading the work over three models stretches them.
+ */
+const DEFAULT_MODELS = {
+  groq: { main: "openai/gpt-oss-120b", suspect: "qwen/qwen3.8-27b", guard: "openai/gpt-oss-20b" },
+  anthropic: { main: "claude-opus-5-5", suspect: "claude-opus-5-5", guard: "claude-haiku-5-5" },
+  mock: { main: "mock", suspect: "mock", guard: "mock" },
+}[llmMode];
 
 export const config = {
   llmMode,
+  groqApiKey: env.GROQ_API_KEY,
   anthropicApiKey: env.ANTHROPIC_API_KEY,
-  modelMain: env.MODEL_MAIN,
-  modelGuard: env.MODEL_GUARD,
+  modelMain: env.MODEL_MAIN ?? DEFAULT_MODELS.main,
+  modelSuspect: env.MODEL_SUSPECT ?? DEFAULT_MODELS.suspect,
+  modelGuard: env.MODEL_GUARD ?? DEFAULT_MODELS.guard,
   port: env.SERVER_PORT,
   clientOrigins: env.CLIENT_ORIGIN.split(",").map((s) => s.trim()),
   redisUrl: env.REDIS_URL,

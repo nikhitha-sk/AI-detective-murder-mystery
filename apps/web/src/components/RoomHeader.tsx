@@ -57,7 +57,7 @@ export function RoomHeader() {
         </button>
         {view.solo && <span className="rounded-full bg-ink-800 px-2 py-0.5 text-xs text-ink-300">solo</span>}
         {view.llmMode === "mock" && (
-          <span className="rounded-full bg-clue-900 px-2 py-0.5 text-xs text-clue-300" title="No ANTHROPIC_API_KEY: hand-written cases and rule-based suspects">
+          <span className="rounded-full bg-clue-900 px-2 py-0.5 text-xs text-clue-300" title="No GROQ_API_KEY: hand-written cases and rule-based suspects">
             mock AI
           </span>
         )}

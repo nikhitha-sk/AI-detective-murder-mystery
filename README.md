@@ -35,7 +35,7 @@ Lobby -> Briefing -> Interrogation x3 -> Discussion -> Accusation vote -> Reveal
 | Game server | Node.js + TypeScript, Socket.IO, XState (phase machine) |
 | Live state | Redis + `@socket.io/redis-adapter` (rooms, suspect memory, rate limits, locks); in-memory fallback |
 | Database | PostgreSQL with Drizzle ORM (cases, games, transcripts, votes, results) |
-| LLM | Anthropic Claude: `claude-opus-5-5` for cases, solver and suspects; `claude-haiku-5-5` for the guard and summaries. Structured JSON output, validated with Zod |
+| LLM | Groq (free tier) by default: `openai/gpt-oss-120b` for cases and the solver, `qwen/qwen3.8-27b` for suspects, `openai/gpt-oss-20b` for the guard and summaries. Anthropic Claude is also supported. Structured JSON output, validated with Zod |
 | Deploy | Docker and docker compose |
 
 ## Project layout
@@ -88,8 +88,8 @@ npm install
 
 # 2. Create your environment file
 cp .env.example .env          # Windows PowerShell: Copy-Item .env.example .env
-#    then put your key in .env:  ANTHROPIC_API_KEY=sk-ant-...
-#    (leave it empty to play in mock mode)
+#    then put your free Groq key in .env:  GROQ_API_KEY=gsk_...
+#    (get one at https://console.groq.com/keys; leave it empty to play in mock mode)
 
 # 3. Start Postgres and Redis
 npm run infra:up
@@ -112,7 +112,7 @@ Leave `REDIS_URL` and `DATABASE_URL` empty in `.env`. The server then uses an in
 docker compose --profile app up --build
 ```
 
-This builds and runs the server and web images alongside Postgres and Redis. It passes `ANTHROPIC_API_KEY` through from `.env` or your shell.
+This builds and runs the server and web images alongside Postgres and Redis. It passes `GROQ_API_KEY` (and `ANTHROPIC_API_KEY`) through from `.env` or your shell.
 
 ### Production build (without Docker)
 
@@ -137,10 +137,12 @@ npm run start      # runs the server and the built web app
 
 | Variable | Default | Notes |
 |---|---|---|
-| `LLM_PROVIDER` | `auto` | `auto` uses Claude if `ANTHROPIC_API_KEY` is set, otherwise mock. Force with `anthropic` / `mock` |
+| `LLM_PROVIDER` | `auto` | `auto` uses Groq if `GROQ_API_KEY` is set, else Claude if `ANTHROPIC_API_KEY` is set, otherwise mock. Force with `groq` / `anthropic` / `mock` |
+| `GROQ_API_KEY` | (empty) | Your Groq API key (free at https://console.groq.com/keys) |
 | `ANTHROPIC_API_KEY` | (empty) | Your Claude API key |
-| `MODEL_MAIN` | `claude-opus-5-5` | Case generation, solver, suspects |
-| `MODEL_GUARD` | `claude-haiku-5-5` | Reply guard and memory summaries |
+| `MODEL_MAIN` | Groq: `openai/gpt-oss-120b`, Claude: `claude-opus-5-5` | Case generation and solver |
+| `MODEL_SUSPECT` | Groq: `qwen/qwen3.8-27b`, Claude: `claude-opus-5-5` | Suspect replies |
+| `MODEL_GUARD` | Groq: `openai/gpt-oss-20b`, Claude: `claude-haiku-5-5` | Reply guard and memory summaries |
 | `REDIS_URL` | `redis://localhost:56379` | Empty = in-memory store |
 | `DATABASE_URL` | `postgres://mystery:mystery@localhost:55432/mystery` | Empty = no persistence |
 | `ROUNDS`, `BRIEFING_SECONDS`, `ROUND_SECONDS`, `DISCUSSION_SECONDS`, `VOTE_SECONDS` | 3, 60, 240, 120, 60 | Phase timers. The host can also skip ahead |

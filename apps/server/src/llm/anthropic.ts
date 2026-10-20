@@ -62,7 +62,7 @@ export class AnthropicProvider implements LlmProvider {
 
   constructor(
     apiKey: string | undefined,
-    private models: { main: string; guard: string },
+    private models: { main: string; suspect: string; guard: string },
   ) {
     this.client = new Anthropic(apiKey ? { apiKey } : {});
   }
@@ -101,7 +101,7 @@ export class AnthropicProvider implements LlmProvider {
 
   async suspectReply(turn: SuspectTurn) {
     const stream = this.client.beta.messages.stream({
-      model: this.models.main,
+      model: this.models.suspect,
       max_tokens: 4000,
       ...FALLBACK,
       // Conversational turn: low effort keeps latency down.
@@ -118,7 +118,7 @@ export class AnthropicProvider implements LlmProvider {
     return {
       text: textOf(message),
       refused: message.stop_reason === "refusal",
-      usage: [usageFrom(this.models.main, message.usage)],
+      usage: [usageFrom(this.models.suspect, message.usage)],
     };
   }
 

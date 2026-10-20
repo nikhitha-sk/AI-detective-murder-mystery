@@ -18,7 +18,7 @@ const PHASES = [
   ["Reveal", "true timeline, who was closest"],
 ];
 
-type Health = { ok: boolean; llmMode: "anthropic" | "mock"; redis: boolean; postgres: boolean } | null | "down";
+type Health = { ok: boolean; llmMode: "groq" | "anthropic" | "mock"; redis: boolean; postgres: boolean } | null | "down";
 
 export default function Home() {
   const router = useRouter();
@@ -158,7 +158,9 @@ export default function Home() {
               <ul className="mt-2 space-y-1 text-ink-300">
                 <li>
                   Suspects:{" "}
-                  {health.llmMode === "anthropic" ? (
+                  {health.llmMode === "groq" ? (
+                    <span className="text-mint-400">Groq</span>
+                  ) : health.llmMode === "anthropic" ? (
                     <span className="text-mint-400">Claude</span>
                   ) : (
                     <span className="text-clue-400">Mock AI (no API key, hand-written cases)</span>

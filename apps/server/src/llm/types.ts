@@ -84,7 +84,7 @@ export interface CaseRequest {
 }
 
 export interface LlmProvider {
-  readonly mode: "anthropic" | "mock";
+  readonly mode: "groq" | "anthropic" | "mock";
   /** Returns raw JSON; the caller validates it with Zod and the rule checks. */
   generateCase(req: CaseRequest): Promise<{ raw: unknown; usage: Usage[] }>;
   solve(input: SolverInput): Promise<{ result: SolverResult; usage: Usage[] }>;

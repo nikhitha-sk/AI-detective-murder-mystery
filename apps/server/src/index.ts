@@ -38,7 +38,8 @@ const httpServer = createServer((req, res) => {
       JSON.stringify({
         ok: true,
         llmMode: llm.mode,
-        models: llm.mode === "anthropic" ? { main: config.modelMain, guard: config.modelGuard } : null,
+        models:
+          llm.mode === "mock" ? null : { main: config.modelMain, suspect: config.modelSuspect, guard: config.modelGuard },
         redis: store instanceof RedisStore,
         postgres: db.enabled,
       }),
@@ -201,7 +202,11 @@ const ticker = setInterval(() => void engine.tick().catch((err) => console.error
 httpServer.listen(config.port, () => {
   console.log(`\n  AI Detective game server on http://localhost:${config.port}`);
   console.log(
-    `  LLM: ${llm.mode === "anthropic" ? `Claude (${config.modelMain} + guard ${config.modelGuard})` : "mock (no API key - hand-written cases)"}`,
+    `  LLM: ${
+      llm.mode === "mock"
+        ? "mock (no API key - hand-written cases)"
+        : `${llm.mode === "groq" ? "Groq" : "Claude"} (main ${config.modelMain}, suspects ${config.modelSuspect}, guard ${config.modelGuard})`
+    }`,
   );
   console.log(`  Live state: ${store instanceof RedisStore ? "Redis" : "in-memory"}   Persistence: ${db.enabled ? "PostgreSQL" : "off"}\n`);
 });

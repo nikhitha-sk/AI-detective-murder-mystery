@@ -34,9 +34,11 @@ services:
       dockerfile: apps/server/Dockerfile
     environment:
       LLM_PROVIDER: ${LLM_PROVIDER:-auto}
+      GROQ_API_KEY: ${GROQ_API_KEY:-}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
-      MODEL_MAIN: ${MODEL_MAIN:-claude-opus-5-5}
-      MODEL_GUARD: ${MODEL_GUARD:-claude-haiku-5-5}
+      MODEL_MAIN: ${MODEL_MAIN:-}
+      MODEL_SUSPECT: ${MODEL_SUSPECT:-}
+      MODEL_GUARD: ${MODEL_GUARD:-}
       SERVER_PORT: 4300
       CLIENT_ORIGIN: http://localhost:3300
       REDIS_URL: redis://redis:6379

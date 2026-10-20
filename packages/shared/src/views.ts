@@ -97,7 +97,7 @@ export interface RoomView {
   tokenUsed: number;
   tokenBudget: number;
   generation: GenerationStatus;
-  llmMode: "anthropic" | "mock";
+  llmMode: "groq" | "anthropic" | "mock";
 }
 
 export interface NoteItem {
