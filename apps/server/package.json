@@ -1,0 +1,35 @@
+{
+  "name": "@mystery/server",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "start": "tsx src/index.ts",
+    "cli": "tsx src/scripts/cli.ts",
+    "eval": "tsx src/scripts/eval.ts",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "tsx src/scripts/migrate.ts",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.135.0",
+    "@mystery/shared": "*",
+    "@socket.io/redis-adapter": "^8.3.0",
+    "drizzle-orm": "^0.45.4",
+    "ioredis": "^5.11.1",
+    "pg": "^8.16.3",
+    "socket.io": "^4.8.1",
+    "tsx": "^4.20.6",
+    "xstate": "^5.23.0",
+    "zod": "^4.1.12"
+  },
+  "devDependencies": {
+    "@types/node": "^22.18.0",
+    "@types/pg": "^8.15.5",
+    "drizzle-kit": "^0.31.5",
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.4"
+  }
+}

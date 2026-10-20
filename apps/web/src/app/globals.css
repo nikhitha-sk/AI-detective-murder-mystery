@@ -1,0 +1,76 @@
+@import "tailwindcss";
+
+@theme {
+  --color-ink-950: #0b0910;
+  --color-ink-900: #121019;
+  --color-ink-850: #18151f;
+  --color-ink-800: #1f1b29;
+  --color-ink-700: #2c2738;
+  --color-ink-600: #3d3650;
+  --color-ink-400: #8b84a0;
+  --color-ink-300: #b4adc7;
+  --color-ink-100: #ece9f3;
+  --color-plum-400: #a78bfa;
+  --color-plum-500: #8b5cf6;
+  --color-plum-600: #6d3fc4;
+  --color-plum-700: #55309a;
+  --color-clue-300: #fcd34d;
+  --color-clue-400: #f5b83d;
+  --color-clue-900: #3a2a0b;
+  --color-blood-400: #f87171;
+  --color-blood-500: #dc2626;
+  --color-blood-900: #3b0d0d;
+  --color-mint-400: #4ade80;
+
+  --font-display: var(--font-playfair), Georgia, serif;
+  --font-sans: var(--font-inter), system-ui, sans-serif;
+  --font-type: var(--font-special-elite), "Courier New", monospace;
+}
+
+html,
+body {
+  background: var(--color-ink-950);
+  color: var(--color-ink-100);
+}
+
+body {
+  background-image:
+    radial-gradient(1200px 600px at 10% -10%, rgb(109 63 196 / 0.18), transparent 60%),
+    radial-gradient(900px 500px at 110% 10%, rgb(245 184 61 / 0.06), transparent 60%);
+  background-attachment: fixed;
+  min-height: 100dvh;
+}
+
+.paper {
+  background:
+    repeating-linear-gradient(0deg, rgb(0 0 0 / 0.025) 0 1px, transparent 1px 28px),
+    #f4ead2;
+  color: #2b2116;
+}
+
+.corkboard {
+  background-color: #3b2b1d;
+  background-image:
+    radial-gradient(rgb(0 0 0 / 0.25) 1px, transparent 1.5px),
+    radial-gradient(rgb(255 255 255 / 0.05) 1px, transparent 1.5px);
+  background-size: 14px 14px, 22px 22px;
+  background-position: 0 0, 7px 7px;
+}
+
+.scrollbar-thin {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-ink-600) transparent;
+}
+
+.caret::after {
+  content: "▍";
+  margin-left: 1px;
+  animation: blink 1s steps(1) infinite;
+  color: var(--color-plum-400);
+}
+
+@keyframes blink {
+  50% {
+    opacity: 0;
+  }
+}

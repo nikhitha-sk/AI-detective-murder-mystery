@@ -1,0 +1,30 @@
+{
+  "name": "ai-detective-murder-mystery",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Multiplayer deduction game where every suspect is an LLM agent with hidden motives and private memories.",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "infra:up": "docker compose up -d postgres redis",
+    "infra:down": "docker compose down",
+    "db:migrate": "npm run db:migrate -w @mystery/server",
+    "dev": "concurrently -n server,web -c magenta,cyan \"npm run dev -w @mystery/server\" \"npm run dev -w @mystery/web\"",
+    "dev:server": "npm run dev -w @mystery/server",
+    "dev:web": "npm run dev -w @mystery/web",
+    "build": "npm run build -w @mystery/web",
+    "start": "concurrently -n server,web -c magenta,cyan \"npm run start -w @mystery/server\" \"npm run start -w @mystery/web\"",
+    "cli": "npm run cli -w @mystery/server --",
+    "eval": "npm run eval -w @mystery/server --",
+    "test": "npm run test -w @mystery/server",
+    "typecheck": "npm run typecheck --workspaces --if-present"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.1"
+  },
+  "engines": {
+    "node": ">=20.12"
+  }
+}

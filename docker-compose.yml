@@ -1,0 +1,65 @@
+# Local infrastructure for development:   docker compose up -d postgres redis
+# Full stack in containers:                docker compose --profile app up --build
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: mystery
+      POSTGRES_PASSWORD: mystery
+      POSTGRES_DB: mystery
+    ports:
+      - "55432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mystery"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "56379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  server:
+    profiles: ["app"]
+    build:
+      context: .
+      dockerfile: apps/server/Dockerfile
+    environment:
+      LLM_PROVIDER: ${LLM_PROVIDER:-auto}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      MODEL_MAIN: ${MODEL_MAIN:-claude-opus-5-5}
+      MODEL_GUARD: ${MODEL_GUARD:-claude-haiku-5-5}
+      SERVER_PORT: 4300
+      CLIENT_ORIGIN: http://localhost:3300
+      REDIS_URL: redis://redis:6379
+      DATABASE_URL: postgres://mystery:mystery@postgres:5432/mystery
+    ports:
+      - "4300:4300"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  web:
+    profiles: ["app"]
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      args:
+        NEXT_PUBLIC_SERVER_URL: http://localhost:4300
+    ports:
+      - "3300:3300"
+    depends_on:
+      - server
+
+volumes:
+  pgdata:
