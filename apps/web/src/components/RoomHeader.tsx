@@ -4,6 +4,8 @@ import type { Phase } from "@mystery/shared";
 import Link from "next/link";
 import { useState } from "react";
 import { useGame, useMe } from "@/store/game";
+import { icons } from "./board/Board";
+import { SoundToggle, useBoardOverlay } from "./GlobalBoard";
 import { Button, Countdown, cx } from "./ui";
 
 const PHASES: { id: Phase; label: string }[] = [
@@ -29,6 +31,7 @@ export function RoomHeader() {
   const leave = useGame((s) => s.leaveRoom);
   const me = useMe();
   const [copied, setCopied] = useState(false);
+  const openBoard = useBoardOverlay((s) => s.setOpen);
   const isHost = me?.isHost ?? false;
   const phaseIndex = PHASES.findIndex((p) => p.id === (view.phase === "generating" ? "lobby" : view.phase));
 
@@ -41,12 +44,13 @@ export function RoomHeader() {
   }
 
   return (
-    <header className="sticky top-0 z-30 border-b border-ink-700/80 bg-ink-950/85 backdrop-blur">
+    <header className="sticky top-0 z-30 border-b border-ink-700/80 bg-ink-950/80 backdrop-blur-md">
       <div className="mx-auto flex max-w-[1500px] flex-wrap items-center gap-x-4 gap-y-2 px-3 py-3 sm:px-5">
-        <Link href="/" onClick={leave} className="font-display text-lg font-extrabold tracking-tight" title="Leave room">
+        <Link href="/" onClick={leave} className="flex items-center gap-2 font-display text-lg font-extrabold tracking-tight" title="Leave room">
+          <span className="grid h-7 w-7 place-items-center rounded-full bg-blood-500 text-sm text-white shadow-[0_0_12px_rgb(220_38_38/0.6)]">?</span>
           AI Detective
         </Link>
-        {view.case && <span className="hidden truncate text-sm text-ink-300 md:inline">· {view.case.title}</span>}
+        {view.case && <span className="hidden max-w-56 truncate text-sm text-ink-300 2xl:inline">· {view.case.title}</span>}
 
         <button
           onClick={copy}
@@ -68,7 +72,7 @@ export function RoomHeader() {
               key={p.id}
               className={cx(
                 "whitespace-nowrap rounded-full px-2.5 py-1",
-                i === phaseIndex ? "bg-plum-600 text-white" : i < phaseIndex ? "text-ink-300" : "text-ink-400/70",
+                i === phaseIndex ? "bg-clue-400 font-semibold text-ink-950 shadow-[0_0_14px_rgb(245_184_61/0.4)]" : i < phaseIndex ? "text-ink-300" : "text-ink-400/70",
               )}
             >
               {p.label}
@@ -78,8 +82,18 @@ export function RoomHeader() {
         </ol>
 
         <div className="ml-auto flex items-center gap-3 lg:ml-0">
+          <button
+            type="button"
+            onClick={() => openBoard(true)}
+            className="flex h-9 items-center gap-1.5 rounded-lg border border-[#6b4423] bg-gradient-to-b from-[#8a5a32] to-[#5a3a1f] px-2.5 text-sm font-semibold text-[#f4ead2] hover:brightness-110"
+            title="Open the detective board (B)"
+          >
+            {icons.board}
+            <span className="hidden 2xl:inline">Board</span>
+          </button>
+          <SoundToggle />
           {view.phaseEndsAt && (
-            <span className="rounded-md bg-ink-850 px-2.5 py-1 text-sm">
+            <span className="rounded-md border border-ink-700 bg-ink-850 px-2.5 py-1 text-base">
               <Countdown endsAt={view.phaseEndsAt} />
             </span>
           )}

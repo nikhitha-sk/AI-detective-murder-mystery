@@ -1,28 +1,101 @@
 "use client";
 
 import { THEMES, type ThemeId } from "@mystery/shared";
-import { motion } from "framer-motion";
+import { AnimatePresence, motion } from "framer-motion";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import { icons } from "@/components/board/Board";
+import { SoundToggle, useBoardOverlay } from "@/components/GlobalBoard";
+import { Portrait } from "@/components/Portrait";
+import { Scene } from "@/components/Scene";
+import { ThemePicker } from "@/components/ThemePicker";
 import { Button, Spinner, Toasts, cx } from "@/components/ui";
+import type { Expression } from "@/lib/expression";
 import { getSavedName, saveName } from "@/lib/identity";
+import { sfx } from "@/lib/sfx";
 import { SERVER_URL } from "@/lib/socket";
 import { useGame } from "@/store/game";
 
-const PHASES = [
-  ["Lobby", "room code, 2-6 players or solo"],
-  ["Briefing", "victim, scene, suspect cards"],
-  ["Interrogation x3", "timed rounds, question budget"],
-  ["Discussion", "players compare notes"],
-  ["Accusation", "one vote each"],
-  ["Reveal", "true timeline, who was closest"],
+const STEPS = [
+  ["Briefing", "Read the case file and meet the suspects"],
+  ["Interrogate", "Three timed rounds. Ask anything, publicly or in private"],
+  ["Present evidence", "New clues unlock each round. Confront them"],
+  ["Work the board", "Pin, draw and connect the dots"],
+  ["Accuse", "One vote each in the lineup"],
+  ["The reveal", "The truth, the timeline, and who was closest"],
 ];
 
+/** Sample cast shown on the title screen. */
+const CAST: Record<ThemeId, { id: string; name: string; role: string }[]> = {
+  "manor-1920s": [
+    { id: "h1", name: "Lady Evelyn Ashford", role: "the widow" },
+    { id: "h2", name: "Mr. Silas Crane", role: "butler" },
+    { id: "h3", name: "Miss Clara Vane", role: "jazz singer" },
+    { id: "h4", name: "Dr. Arthur Penhallow", role: "family doctor" },
+    { id: "h5", name: "Lord Edmund Hale", role: "nephew" },
+  ],
+  "college-fest": [
+    { id: "h1", name: "Ms. Priya Raman", role: "fest organiser" },
+    { id: "h2", name: "Mr. Arjun Mehta", role: "band frontman" },
+    { id: "h3", name: "Miss Zoe Kim", role: "student president" },
+    { id: "h4", name: "Mr. Rohan Das", role: "sound engineer" },
+    { id: "h5", name: "Professor Lena Ortiz", role: "faculty advisor" },
+  ],
+  "startup-office": [
+    { id: "h1", name: "Ms. Maya Chen", role: "CTO" },
+    { id: "h2", name: "Mr. Dev Patel", role: "founder" },
+    { id: "h3", name: "Sam Rivera", role: "intern" },
+    { id: "h4", name: "Ms. Grace Liu", role: "investor" },
+    { id: "h5", name: "Mr. Omar Haddad", role: "lead designer" },
+  ],
+};
+
+const MOODS: Expression[] = ["smug", "nervous", "calm", "surprised", "angry", "thinking", "sad", "neutral"];
+
 type Health = { ok: boolean; llmMode: "groq" | "anthropic" | "mock"; redis: boolean; postgres: boolean } | null | "down";
+
+function TitleCast({ theme }: { theme: ThemeId }) {
+  const [tick, setTick] = useState(0);
+  const [hover, setHover] = useState<string | null>(null);
+  useEffect(() => {
+    const t = setInterval(() => setTick((n) => n + 1), 1900);
+    return () => clearInterval(t);
+  }, []);
+  const cast = CAST[theme];
+  return (
+    <div className="relative flex items-end justify-center overflow-hidden px-2 pt-6">
+      {cast.map((c, i) => {
+        const mid = (cast.length - 1) / 2;
+        const depth = Math.abs(i - mid);
+        return (
+          <motion.div
+            key={`${theme}-${c.id}`}
+            initial={{ opacity: 0, y: 50 }}
+            animate={{ opacity: 1, y: depth * 6 }}
+            transition={{ delay: 0.1 * i, type: "spring", stiffness: 120, damping: 16 }}
+            className="relative -mx-2.5 sm:-mx-6"
+            style={{ zIndex: 10 - Math.round(depth * 2) }}
+            onHoverStart={() => setHover(c.id)}
+            onHoverEnd={() => setHover(null)}
+          >
+            <Portrait
+              seed={{ ...c, theme }}
+              expression={hover === c.id ? "smug" : MOODS[(tick + i * 3) % MOODS.length]}
+              size={190}
+              className={cx("h-auto drop-shadow-[0_20px_30px_rgb(0_0_0/0.75)]", depth > 1 ? "w-[68px] sm:w-[150px]" : depth > 0 ? "w-[80px] sm:w-[170px]" : "w-[96px] sm:w-[190px]")}
+            />
+          </motion.div>
+        );
+      })}
+      <div className="table-edge absolute inset-x-0 bottom-0 z-20 h-8 sm:h-10" />
+    </div>
+  );
+}
 
 export default function Home() {
   const router = useRouter();
   const createRoom = useGame((s) => s.createRoom);
+  const openBoard = useBoardOverlay((s) => s.setOpen);
   const [name, setName] = useState("");
   const [theme, setTheme] = useState<ThemeId>("manor-1920s");
   const [joinCode, setJoinCode] = useState("");
@@ -41,6 +114,7 @@ export default function Home() {
 
   async function create(solo: boolean) {
     if (!validName) return;
+    sfx.phase();
     setBusy(solo ? "solo" : "create");
     try {
       const code = await createRoom(name.trim(), theme, solo);
@@ -54,6 +128,7 @@ export default function Home() {
     e.preventDefault();
     const code = joinCode.trim().toUpperCase();
     if (!validName || code.length !== 6) return;
+    sfx.click();
     setBusy("join");
     // Persist the name first; the room page performs the join.
     saveName(name.trim());
@@ -61,134 +136,150 @@ export default function Home() {
   }
 
   return (
-    <main className="mx-auto flex min-h-dvh max-w-6xl flex-col px-4 py-10 sm:px-6 lg:py-16">
-      <motion.header initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="max-w-3xl">
-        <p className="mb-3 text-xs font-semibold uppercase tracking-[0.3em] text-plum-400">A multiplayer deduction game</p>
-        <h1 className="font-display text-5xl font-extrabold leading-[1.05] sm:text-7xl">
-          AI Detective
-          <span className="block text-ink-300">Murder Mystery</span>
-        </h1>
-        <p className="mt-5 max-w-2xl text-lg text-ink-300">
-          Every suspect is an AI with hidden motives and private memories. Question them in plain language, publicly or
-          in private, confront them with evidence, then vote on who did it.
-        </p>
-      </motion.header>
+    <main className="min-h-dvh pb-24">
+      <AnimatePresence mode="wait">
+        <motion.div key={theme} initial={{ opacity: 0.4 }} animate={{ opacity: 1 }} exit={{ opacity: 0.4 }} transition={{ duration: 0.4 }}>
+          <Scene theme={theme} variant="hero" className="min-h-[640px] border-b border-ink-700/80 lg:min-h-[680px]">
+            <div className="mx-auto grid max-w-7xl gap-6 px-4 pt-6 sm:px-6 lg:grid-cols-[1fr_420px] lg:pt-10">
+              <div className="flex min-w-0 flex-col">
+                <div className="flex items-center justify-between">
+                  <p className="text-xs font-semibold uppercase tracking-[0.3em] text-clue-300">A multiplayer deduction game</p>
+                  <SoundToggle className="lg:hidden" />
+                </div>
+                <motion.h1
+                  initial={{ opacity: 0, y: 16, letterSpacing: "0.2em" }}
+                  animate={{ opacity: 1, y: 0, letterSpacing: "-0.01em" }}
+                  transition={{ duration: 0.8, ease: [0.2, 0.8, 0.2, 1] }}
+                  className="mt-3 font-display text-5xl font-extrabold leading-[1] drop-shadow-[0_4px_24px_rgb(0_0_0/0.8)] sm:text-7xl"
+                >
+                  AI Detective
+                  <span className="block bg-gradient-to-r from-blood-400 via-clue-300 to-blood-400 bg-clip-text text-transparent">Murder Mystery</span>
+                </motion.h1>
+                <p className="mt-4 max-w-xl text-lg text-ink-100/90 drop-shadow">
+                  Every suspect is an AI with hidden motives and private memories. Read their faces, question them, confront them with evidence,
+                  then name the killer.
+                </p>
+                <div className="mt-auto pt-8">
+                  <TitleCast theme={theme} />
+                </div>
+              </div>
 
-      <div className="mt-10 grid gap-6 lg:grid-cols-[1.4fr_1fr]">
-        <motion.section
-          initial={{ opacity: 0, y: 16 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.08 }}
-          className="rounded-2xl border border-ink-700 bg-ink-900/80 p-5 sm:p-6"
-        >
-          <label className="block text-xs font-semibold uppercase tracking-[0.18em] text-ink-300" htmlFor="name">
-            Your detective name
-          </label>
-          <input
-            id="name"
-            value={name}
-            maxLength={24}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="e.g. Inspector Rao"
-            className="mt-2 w-full rounded-lg border border-ink-600 bg-ink-850 px-4 py-3 text-base outline-none placeholder:text-ink-400 focus:border-plum-500"
-          />
-
-          <p className="mt-6 text-xs font-semibold uppercase tracking-[0.18em] text-ink-300">Pick a setting</p>
-          <div className="mt-2 grid gap-3 sm:grid-cols-3">
-            {THEMES.map((t) => (
-              <button
-                key={t.id}
-                onClick={() => setTheme(t.id)}
-                className={cx(
-                  "rounded-xl border p-4 text-left transition",
-                  theme === t.id ? "border-plum-500 bg-plum-700/20" : "border-ink-700 bg-ink-850 hover:border-ink-600",
-                )}
+              <motion.section
+                initial={{ opacity: 0, x: 30 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: 0.15 }}
+                className="min-w-0 self-start rounded-2xl border border-white/10 bg-ink-950/75 p-5 shadow-2xl backdrop-blur-md sm:p-6"
               >
-                <span className="font-display text-lg font-bold">{t.label}</span>
-                <span className="mt-1 block text-sm text-ink-300">{t.blurb}</span>
-              </button>
-            ))}
-          </div>
+                <div className="flex items-center justify-between">
+                  <label className="block text-xs font-semibold uppercase tracking-[0.18em] text-ink-300" htmlFor="name">
+                    Your detective name
+                  </label>
+                  <SoundToggle className="hidden lg:grid" />
+                </div>
+                <div className="mt-2 flex items-center gap-2 rounded-lg border border-ink-600 bg-ink-850 px-3 focus-within:border-clue-400/70">
+                  <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-gradient-to-br from-[#d4af37] to-[#8a6a1f] text-sm font-bold text-ink-950">
+                    {name.trim()[0]?.toUpperCase() ?? "?"}
+                  </span>
+                  <input
+                    id="name"
+                    value={name}
+                    maxLength={24}
+                    onChange={(e) => setName(e.target.value)}
+                    placeholder="e.g. Inspector Rao"
+                    className="w-full bg-transparent py-3 text-base outline-none placeholder:text-ink-400"
+                  />
+                </div>
 
-          <div className="mt-6 flex flex-wrap gap-3">
-            <Button onClick={() => create(false)} disabled={!validName || busy !== null} className="px-6 py-3 text-base">
-              {busy === "create" && <Spinner />} Create a room
-            </Button>
-            <Button variant="ghost" onClick={() => create(true)} disabled={!validName || busy !== null} className="px-6 py-3 text-base">
-              {busy === "solo" && <Spinner />} Play solo
-            </Button>
-          </div>
-          {!validName && <p className="mt-3 text-sm text-ink-400">Enter a name to start.</p>}
-        </motion.section>
+                <div className="mt-4 grid gap-2">
+                  <Button onClick={() => create(true)} disabled={!validName || busy !== null} className="py-3.5 text-base">
+                    {busy === "solo" && <Spinner />} Play solo
+                  </Button>
+                  <Button variant="ghost" onClick={() => create(false)} disabled={!validName || busy !== null} className="py-3">
+                    {busy === "create" && <Spinner />} Create a room for friends
+                  </Button>
+                </div>
 
-        <motion.section
-          initial={{ opacity: 0, y: 16 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.16 }}
-          className="flex flex-col gap-6"
-        >
-          <form onSubmit={join} className="rounded-2xl border border-ink-700 bg-ink-900/80 p-5 sm:p-6">
-            <label className="block text-xs font-semibold uppercase tracking-[0.18em] text-ink-300" htmlFor="code">
-              Join a room
-            </label>
-            <div className="mt-2 flex gap-2">
-              <input
-                id="code"
-                value={joinCode}
-                maxLength={6}
-                onChange={(e) => setJoinCode(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ""))}
-                placeholder="ROOM CODE"
-                className="min-w-0 flex-1 rounded-lg border border-ink-600 bg-ink-850 px-4 py-3 font-mono text-lg tracking-[0.3em] outline-none placeholder:text-ink-400 placeholder:tracking-widest focus:border-plum-500"
-              />
-              <Button type="submit" disabled={!validName || joinCode.length !== 6 || busy !== null}>
-                {busy === "join" && <Spinner />} Join
-              </Button>
-            </div>
-          </form>
+                <form onSubmit={join} className="mt-4">
+                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-ink-300">Or join a room</p>
+                  <div className="mt-2 flex gap-2">
+                    <input
+                      value={joinCode}
+                      maxLength={6}
+                      onChange={(e) => setJoinCode(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ""))}
+                      placeholder="ROOM CODE"
+                      aria-label="Room code"
+                      className="min-w-0 flex-1 rounded-lg border border-ink-600 bg-ink-850 px-3 py-2.5 font-mono text-lg tracking-[0.3em] outline-none placeholder:text-ink-400 placeholder:tracking-widest focus:border-clue-400/70"
+                    />
+                    <Button type="submit" variant="ghost" disabled={!validName || joinCode.length !== 6 || busy !== null}>
+                      {busy === "join" && <Spinner />} Join
+                    </Button>
+                  </div>
+                </form>
+                {!validName && <p className="mt-3 text-sm text-ink-400">Enter a name to start.</p>}
 
-          <div className="rounded-2xl border border-ink-700 bg-ink-900/60 p-5 text-sm sm:p-6">
-            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-ink-300">Server</p>
-            {health === null && <p className="mt-2 text-ink-400">Checking...</p>}
-            {health === "down" && (
-              <p className="mt-2 text-blood-400">
-                Can&apos;t reach the game server at {SERVER_URL}. Start it with <code className="font-mono">npm run dev</code>.
-              </p>
-            )}
-            {health && health !== "down" && (
-              <ul className="mt-2 space-y-1 text-ink-300">
-                <li>
-                  Suspects:{" "}
-                  {health.llmMode === "groq" ? (
-                    <span className="text-mint-400">Groq</span>
-                  ) : health.llmMode === "anthropic" ? (
-                    <span className="text-mint-400">Claude</span>
-                  ) : (
-                    <span className="text-clue-400">Mock AI (no API key, hand-written cases)</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    sfx.click();
+                    openBoard(true);
+                  }}
+                  className="mt-5 flex w-full items-center gap-3 rounded-xl border border-[#6b4423] bg-gradient-to-r from-[#3b2b1d] to-[#2a1d12] p-3 text-left transition hover:border-clue-400/60"
+                >
+                  <span className="grid h-10 w-10 place-items-center rounded-lg bg-[#8a5a32] text-[#f4ead2]">{icons.board}</span>
+                  <span className="flex-1">
+                    <span className="block font-semibold text-[#f4ead2]">Open the detective board</span>
+                    <span className="block text-xs text-[#f4ead2]/60">Pen, eraser, notes and red string. Press B anytime.</span>
+                  </span>
+                </button>
+
+                <div className="mt-5 flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-ink-700/70 pt-4 text-xs text-ink-400">
+                  {health === null && <span>Checking server...</span>}
+                  {health === "down" && <span className="text-blood-400">Can&apos;t reach the game server at {SERVER_URL}. Start it with npm run dev.</span>}
+                  {health && health !== "down" && (
+                    <>
+                      <span className="flex items-center gap-1.5">
+                        <span className={cx("h-1.5 w-1.5 rounded-full", health.llmMode === "mock" ? "bg-clue-400" : "bg-mint-400")} />
+                        AI: {health.llmMode === "groq" ? "Groq" : health.llmMode === "anthropic" ? "Claude" : "mock (no API key)"}
+                      </span>
+                      <span>State: {health.redis ? "Redis" : "in-memory"}</span>
+                      <span>History: {health.postgres ? "saved" : "not saved"}</span>
+                    </>
                   )}
-                </li>
-                <li>Live state: {health.redis ? "Redis" : "in-memory"}</li>
-                <li>History: {health.postgres ? "PostgreSQL" : "not saved"}</li>
-              </ul>
-            )}
-          </div>
-        </motion.section>
-      </div>
+                </div>
+              </motion.section>
+            </div>
+          </Scene>
+        </motion.div>
+      </AnimatePresence>
 
-      <ol className="mt-12 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
-        {PHASES.map(([title, sub], i) => (
-          <motion.li
-            key={title}
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.2 + i * 0.05 }}
-            className="rounded-xl border border-ink-700 bg-ink-900/60 p-3"
-          >
-            <span className="text-xs font-mono text-plum-400">0{i + 1}</span>
-            <span className="block font-semibold">{title}</span>
-            <span className="block text-xs text-ink-400">{sub}</span>
-          </motion.li>
-        ))}
-      </ol>
+      <section className="mx-auto mt-10 max-w-7xl px-4 sm:px-6">
+        <p className="font-type text-xs uppercase tracking-[0.3em] text-clue-400">Choose your setting</p>
+        <h2 className="mb-4 font-display text-3xl font-bold">Where did it happen?</h2>
+        <ThemePicker value={theme} onChange={(t) => setTheme(t as ThemeId)} />
+      </section>
+
+      <section className="mx-auto mt-12 max-w-7xl px-4 sm:px-6">
+        <p className="font-type text-xs uppercase tracking-[0.3em] text-clue-400">How a case plays</p>
+        <ol className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+          {STEPS.map(([title, sub], i) => (
+            <motion.li
+              key={title}
+              initial={{ opacity: 0, y: 14 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.4 + i * 0.06 }}
+              className="paper relative rounded-sm p-3 shadow-lg"
+              style={{ rotate: `${i % 2 ? 1 : -1}deg` }}
+            >
+              <span className="font-type text-xs text-blood-500">0{i + 1}</span>
+              <span className="block font-display font-bold">{title}</span>
+              <span className="block text-xs opacity-70">{sub}</span>
+            </motion.li>
+          ))}
+        </ol>
+        <p className="mt-6 text-sm text-ink-400">
+          {THEMES.length} settings · 4-5 suspects per case · solo or up to 6 detectives
+        </p>
+      </section>
       <Toasts />
     </main>
   );

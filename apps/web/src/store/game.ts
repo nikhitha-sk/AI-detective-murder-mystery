@@ -1,8 +1,9 @@
 "use client";
 
-import type { ChatMessage, NoteAddInput, NoteItem, Phase, RevealPayload, RoomView } from "@mystery/shared";
+import type { ChatMessage, NoteAddInput, NoteItem, RevealPayload, RoomView } from "@mystery/shared";
 import { create } from "zustand";
 import { getPlayerId, saveName } from "@/lib/identity";
+import { sfx } from "@/lib/sfx";
 import { getSocket, request } from "@/lib/socket";
 
 export type UiMessage = ChatMessage & { status: "pending" | "streaming" | "done" | "failed" };
@@ -47,16 +48,6 @@ interface GameState {
   toast(text: string, tone?: Toast["tone"]): void;
   dismissToast(id: number): void;
 }
-
-const PHASE_LABEL: Record<Phase, string> = {
-  lobby: "Back in the lobby",
-  generating: "Writing the case...",
-  briefing: "Briefing: read the case file",
-  interrogation: "Interrogation",
-  discussion: "Discussion: compare notes",
-  voting: "Accusation: cast your vote",
-  reveal: "The reveal",
-};
 
 let listenersBound = false;
 let toastId = 0;
@@ -104,8 +95,8 @@ export const useGame = create<GameState>((set, get) => {
           get().toast(view.generation.message, "error");
         }
       });
-      socket.on("phase:changed", ({ phase, round }) => {
-        get().toast(phase === "interrogation" ? `Interrogation, round ${round}` : PHASE_LABEL[phase]);
+      // Phase changes are announced by the full-screen PhaseBanner.
+      socket.on("phase:changed", ({ phase }) => {
         if (phase === "lobby") set({ reveal: null, selectedSuspectId: null, pendingClueId: null });
       });
       socket.on("messages:sync", (list) => {
@@ -136,6 +127,7 @@ export const useGame = create<GameState>((set, get) => {
           order: s.order.includes(message.id) ? s.order : [...s.order, message.id],
         }));
         if (message.confession) {
+          sfx.thunder();
           const name = get().view?.case?.suspects.find((x) => x.id === message.suspectId)?.name ?? "A suspect";
           get().toast(`${name} has confessed!`, "error");
         }
@@ -146,6 +138,7 @@ export const useGame = create<GameState>((set, get) => {
         get().toast(error, "error");
       });
       socket.on("clue:unlocked", (clues) => {
+        if (clues.length) sfx.clue();
         for (const c of clues) get().toast(`New evidence: ${c.text}`, "clue");
       });
       socket.on("suspect:update", (suspect) => {

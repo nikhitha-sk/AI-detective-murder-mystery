@@ -8,8 +8,10 @@ import { Discussion } from "@/components/Discussion";
 import { Generating } from "@/components/Generating";
 import { Interrogation } from "@/components/Interrogation";
 import { Lobby } from "@/components/Lobby";
+import { PhaseBanner } from "@/components/PhaseBanner";
 import { Reveal } from "@/components/Reveal";
 import { RoomHeader } from "@/components/RoomHeader";
+import { Scene } from "@/components/Scene";
 import { Button, Spinner, Toasts } from "@/components/ui";
 import { Voting } from "@/components/Voting";
 import { getSavedName } from "@/lib/identity";
@@ -94,9 +96,14 @@ export default function RoomPage() {
   }
 
   return (
-    <div className="flex min-h-dvh flex-col">
+    <div className="relative isolate flex min-h-dvh flex-col">
+      <div className="pointer-events-none fixed inset-0 z-0 opacity-30" aria-hidden>
+        <Scene theme={view.theme} variant="backdrop" className="h-full" />
+      </div>
+      <div className="pointer-events-none fixed inset-0 z-0 bg-gradient-to-b from-ink-950/40 via-ink-950/70 to-ink-950" aria-hidden />
       <RoomHeader />
-      <main className="mx-auto w-full max-w-[1500px] flex-1 px-3 pb-6 pt-4 sm:px-5">
+      <PhaseBanner />
+      <main className="relative z-10 mx-auto w-full max-w-[1500px] flex-1 px-3 pb-20 pt-4 sm:px-5">
         {view.phase === "lobby" && <Lobby />}
         {view.phase === "generating" && <Generating />}
         {view.phase === "briefing" && <Briefing />}

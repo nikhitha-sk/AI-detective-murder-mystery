@@ -2,8 +2,27 @@
 
 import type { PublicSuspect } from "@mystery/shared";
 import { motion } from "framer-motion";
+import { expressionFor } from "@/lib/expression";
 import { useGame, type UiMessage } from "@/store/game";
 import { Avatar, cx } from "./ui";
+
+/** Dialogue with *stage directions* shown as italic asides (also while still being typed). */
+export function Spoken({ text }: { text: string }) {
+  const parts = text.split(/(\*[^*]*\*?)/g).filter(Boolean);
+  return (
+    <>
+      {parts.map((p, i) =>
+        p.startsWith("*") ? (
+          <em key={i} className="font-sans text-[0.9em] not-italic text-clue-300/80">
+            ({p.replace(/\*/g, "").trim()}){" "}
+          </em>
+        ) : (
+          <span key={i}>{i > 0 && parts[i - 1].startsWith("*") ? p.replace(/^\s+/, "") : p}</span>
+        ),
+      )}
+    </>
+  );
+}
 
 export function MessageItem({ m, suspect, showSuspect }: { m: UiMessage; suspect?: PublicSuspect; showSuspect?: boolean }) {
   const me = useGame((s) => s.playerId);
@@ -33,11 +52,11 @@ export function MessageItem({ m, suspect, showSuspect }: { m: UiMessage; suspect
       </div>
 
       <div className="flex items-start gap-2.5">
-        {suspect && <Avatar id={suspect.id} name={suspect.name} size={32} />}
+        {suspect && <Avatar id={suspect.id} name={suspect.name} size={44} expression={expressionFor(m, { ...suspect, confessed: m.confession })} />}
         <div
           className={cx(
             "max-w-[85%] rounded-2xl rounded-tl-sm border px-4 py-2.5",
-            m.confession ? "border-blood-500/70 bg-blood-900/50" : "border-ink-700 bg-ink-850",
+            m.confession ? "border-blood-500/70 bg-blood-900/50" : "border-ink-700 bg-ink-850 font-type text-[14px]",
           )}
         >
           <p className="mb-0.5 text-[11px] font-semibold text-ink-300">
@@ -59,7 +78,9 @@ export function MessageItem({ m, suspect, showSuspect }: { m: UiMessage; suspect
           ) : m.status === "failed" ? (
             <p className="text-sm text-blood-400">No answer. Try asking again.</p>
           ) : (
-            <p className={cx("whitespace-pre-wrap text-[15px] leading-relaxed", m.status === "streaming" && "caret")}>{m.reply}</p>
+            <p className={cx("whitespace-pre-wrap text-[15px] leading-relaxed", m.status === "streaming" && "caret")}>
+              <Spoken text={m.reply} />
+            </p>
           )}
         </div>
       </div>

@@ -2,7 +2,9 @@
 
 import { AnimatePresence, motion } from "framer-motion";
 import { useEffect, useState, type ButtonHTMLAttributes, type ReactNode } from "react";
+import type { Expression } from "@/lib/expression";
 import { useGame } from "@/store/game";
+import { Portrait, suspectSeed } from "./Portrait";
 
 export function cx(...parts: (string | false | null | undefined)[]) {
   return parts.filter(Boolean).join(" ");
@@ -25,7 +27,7 @@ export function Button({
     <button
       {...props}
       className={cx(
-        "inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold transition",
+        "game-btn inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold transition active:scale-[0.97]",
         "disabled:cursor-not-allowed disabled:opacity-40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-plum-400",
         styles[variant],
         className,
@@ -55,26 +57,37 @@ export function suspectColor(id: string) {
   return HUES[(n - 1 + HUES.length) % HUES.length];
 }
 
-export function initials(name: string) {
-  const parts = name.replace(/^(Lady|Lord|Doctor|Dr\.?|Mr\.?|Mrs\.?|Miss|Sir)\s+/i, "").split(/\s+/);
-  return (parts[0]?.[0] ?? "?") + (parts.length > 1 ? parts[parts.length - 1][0] : "");
-}
-
-export function Avatar({ id, name, size = 40, dim }: { id: string; name: string; size?: number; dim?: boolean }) {
+export function Avatar({
+  id,
+  name,
+  role,
+  size = 40,
+  dim,
+  expression = "neutral",
+  className,
+}: {
+  id: string;
+  name: string;
+  role?: string;
+  size?: number;
+  dim?: boolean;
+  expression?: Expression;
+  className?: string;
+}) {
+  const theme = useGame((s) => s.view?.theme);
+  const known = useGame((s) => s.view?.case?.suspects.find((x) => x.id === id));
   const color = suspectColor(id);
   return (
     <div
-      className={cx("grid shrink-0 place-items-center rounded-full font-display font-bold text-ink-950", dim && "opacity-60")}
+      className={cx("shrink-0 overflow-hidden rounded-full", dim && "opacity-60 grayscale", className)}
       style={{
         width: size,
         height: size,
-        fontSize: size * 0.38,
-        background: `radial-gradient(circle at 30% 25%, #fff6, transparent 55%), ${color}`,
-        boxShadow: `0 0 0 2px #0b0910, 0 0 0 3px ${color}55`,
+        background: `radial-gradient(circle at 50% 35%, ${color}66, #15111c 78%)`,
+        boxShadow: `0 0 0 2px #0b0910, 0 0 0 3px ${color}88`,
       }}
-      aria-hidden
     >
-      {initials(name)}
+      <Portrait seed={suspectSeed({ id, name, role: role ?? known?.role, bio: known?.bio }, theme)} crop="head" size={size} expression={expression} />
     </div>
   );
 }
@@ -118,13 +131,13 @@ export function Toasts() {
   const toasts = useGame((s) => s.toasts);
   const dismiss = useGame((s) => s.dismissToast);
   return (
-    <div className="pointer-events-none fixed bottom-4 right-4 z-50 flex w-[min(380px,calc(100vw-2rem))] flex-col gap-2">
+    <div className="pointer-events-none fixed right-4 top-20 z-50 flex w-[min(380px,calc(100vw-2rem))] flex-col gap-2">
       <AnimatePresence>
         {toasts.map((t) => (
           <motion.button
             key={t.id}
             layout
-            initial={{ opacity: 0, y: 16, scale: 0.97 }}
+            initial={{ opacity: 0, x: 40, scale: 0.97 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, x: 40 }}
             onClick={() => dismiss(t.id)}
