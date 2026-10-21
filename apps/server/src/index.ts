@@ -27,7 +27,7 @@ type GameSocket = Socket<ClientToServerEvents, ServerToClientEvents, Record<stri
 
 const PLAYER_ID = /^[A-Za-z0-9_-]{8,64}$/;
 
-const store = createStore(config.redisUrl);
+const store = await createStore(config.redisUrl);
 const db = await createPersistence(config.databaseUrl);
 const llm = createLlm(config);
 

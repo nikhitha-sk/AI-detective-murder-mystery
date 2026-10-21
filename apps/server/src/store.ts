@@ -166,7 +166,30 @@ export class LockTimeoutError extends Error {
   }
 }
 
-export function createStore(redisUrl: string | undefined): Store {
+/**
+ * Connects to Redis if configured. If Redis is unreachable at startup (e.g.
+ * Docker isn't running), falls back to the in-memory store instead of
+ * crashing, like the Postgres layer does.
+ */
+export async function createStore(redisUrl: string | undefined): Promise<Store> {
   if (!redisUrl) return new MemoryStore();
-  return new RedisStore(new Redis(redisUrl, { maxRetriesPerRequest: 3 }));
+  const redis = new Redis(redisUrl, { maxRetriesPerRequest: 3, lazyConnect: true, connectTimeout: 3000 });
+  // Connection errors often have an empty message; the code (ECONNREFUSED) is the useful part.
+  const reason = (err: unknown) => (err as Error).message || (err as { code?: string }).code || String(err);
+  // Without a listener ioredis prints "Unhandled error event" on every failed reconnect.
+  let connected = false;
+  redis.on("error", (err) => connected && console.error("[redis]", reason(err)));
+  try {
+    await redis.connect();
+    await redis.ping();
+    connected = true;
+    return new RedisStore(redis);
+  } catch (err) {
+    redis.disconnect();
+    console.warn(
+      `[redis] could not connect to ${redisUrl} - using in-memory state instead (${reason(err)}).` +
+        " Start Docker and run `npm run infra:up` to use Redis.",
+    );
+    return new MemoryStore();
+  }
 }
