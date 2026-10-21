@@ -91,7 +91,9 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 type Attempt =
   | { ok: true; text: string; finish: string; usage: ReturnType<typeof usageFrom> }
-  | { ok: false; retryAfterS: number; detail: string };
+  | { ok: false; retryAfterS: number; detail: string }
+  /** The model couldn't produce valid output for this request: try the next model, no cooldown. */
+  | { ok: false; unusable: true; detail: string };
 
 export class GroqProvider implements LlmProvider {
   readonly mode = "groq" as const;
@@ -103,9 +105,9 @@ export class GroqProvider implements LlmProvider {
     private models: { main: string; suspect: string; guard: string; solver: string },
   ) {}
 
-  /** `first`, then the other models as fallbacks (each has its own rate limit). */
-  private chain(first: string) {
-    return [...new Set([first, this.models.guard, this.models.main, this.models.suspect])];
+  /** `preferred` in order, then the other models as fallbacks (each has its own rate limit). */
+  private chain(...preferred: string[]) {
+    return [...new Set([...preferred, this.models.guard, this.models.main, this.models.suspect])];
   }
 
   private body(model: string, req: ChatRequest) {
@@ -147,22 +149,30 @@ export class GroqProvider implements LlmProvider {
       const retryAfterS = res.status === 429 ? Math.max(1, Number(res.headers.get("retry-after")) || 10) : 2;
       return { ok: false, retryAfterS, detail: `${res.status} from ${model}: ${detail}` };
     }
+    // Strict JSON mode rejects output that doesn't fit the schema (smaller models fail on big schemas).
+    if (res.status === 400 && detail.includes("json_validate_failed")) {
+      return { ok: false, unusable: true, detail: `${model} could not produce valid JSON for this request` };
+    }
     throw new Error(`Groq API error ${res.status} for ${model}: ${detail}`);
   }
 
   private async chat(req: ChatRequest) {
     const maxWaitS = req.maxWaitS ?? LIVE_WAIT_S;
     let lastDetail = "";
+    const unusable = new Set<string>();
     for (let round = 1; ; round++) {
       for (const model of req.models) {
-        if ((this.coolingUntil.get(model) ?? 0) > Date.now()) continue;
+        if (unusable.has(model) || (this.coolingUntil.get(model) ?? 0) > Date.now()) continue;
         const attempt = await this.send(model, req);
         if (attempt.ok) return attempt;
-        this.coolingUntil.set(model, Date.now() + attempt.retryAfterS * 1000);
         lastDetail = attempt.detail;
+        if ("unusable" in attempt) unusable.add(model);
+        else this.coolingUntil.set(model, Date.now() + attempt.retryAfterS * 1000);
       }
-      // Every model is cooling down: wait for the first to reset, if that is soon enough.
-      const soonest = Math.min(...req.models.map((m) => this.coolingUntil.get(m) ?? 0));
+      const usable = req.models.filter((m) => !unusable.has(m));
+      if (!usable.length) throw new Error(`No model could answer this request. ${lastDetail}`);
+      // Every usable model is cooling down: wait for the first to reset, if that is soon enough.
+      const soonest = Math.min(...usable.map((m) => this.coolingUntil.get(m) ?? 0));
       const waitS = Math.max(0, Math.ceil((soonest - Date.now()) / 1000));
       if (round >= MAX_ROUNDS || waitS > maxWaitS) {
         throw new GroqRateLimitError(
@@ -184,7 +194,8 @@ export class GroqProvider implements LlmProvider {
 
   async generateCase(req: CaseRequest) {
     const { value, usage } = await this.chatJson({
-      models: this.chain(this.models.main),
+      // Fallbacks big enough for a whole case first: gpt-oss-20b can't fill the case schema in strict JSON mode.
+      models: this.chain(this.models.main, this.models.suspect),
       maxWaitS: BACKGROUND_WAIT_S,
       system: CASE_SYSTEM,
       user: caseUserPrompt(req),

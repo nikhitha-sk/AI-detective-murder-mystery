@@ -104,6 +104,20 @@ describe("rate limits", () => {
     await expect(groq.summarize("X", [], "")).rejects.toBeInstanceOf(RateLimitError);
   });
 
+  it("Groq moves on to the next model when one can't produce valid JSON", async () => {
+    const calls: string[] = [];
+    vi.stubGlobal("fetch", async (_url: string, init: { body: string }) => {
+      const model = JSON.parse(init.body).model as string;
+      calls.push(model);
+      if (model === "small") return new Response('{"error":{"code":"json_validate_failed"}}', { status: 400 });
+      return ok('{"settings":[{"label":"Tea Estate","blurb":"Mist.","scene":"manor"}]}');
+    });
+    const groq = new GroqProvider("key", { main: "big", solver: "small", suspect: "mid", guard: "small" });
+    const { ideas } = await groq.generateThemes([], 3);
+    expect(ideas[0].label).toBe("Tea Estate");
+    expect(calls).toEqual(["small", "big"]);
+  });
+
   it("case setup waits out a rate limit without using up an attempt", async () => {
     const llm = new MockProvider();
     const real = llm.generateCase.bind(llm);

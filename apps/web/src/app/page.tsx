@@ -5,6 +5,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { icons } from "@/components/board/Board";
+import { CareerCard } from "@/components/CareerCard";
 import { SoundToggle, useBoardOverlay } from "@/components/GlobalBoard";
 import { Portrait } from "@/components/Portrait";
 import { Scene } from "@/components/Scene";
@@ -123,6 +124,7 @@ function TitleCast({ theme }: { theme: string }) {
 export default function Home() {
   const router = useRouter();
   const createRoom = useGame((s) => s.createRoom);
+  const startGame = useGame((s) => s.start);
   const openBoard = useBoardOverlay((s) => s.setOpen);
   const [name, setName] = useState("");
   const [theme, setTheme] = useState<Theme>(THEMES[0]);
@@ -154,6 +156,8 @@ export default function Home() {
     setBusy(solo ? "solo" : "create");
     try {
       const code = await createRoom(name.trim(), themeInput(theme), solo);
+      // Solo: the setting is already chosen here, so skip the lobby and start writing the case.
+      if (solo) await startGame().catch(() => {});
       router.push(`/room/${code}`);
     } catch {
       setBusy(null);
@@ -252,6 +256,8 @@ export default function Home() {
                   </div>
                 </form>
                 {!validName && <p className="mt-3 text-sm text-ink-400">Enter a name to start.</p>}
+
+                <CareerCard className="mt-5" />
 
                 <button
                   type="button"

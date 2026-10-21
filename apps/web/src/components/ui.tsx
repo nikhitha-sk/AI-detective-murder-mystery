@@ -1,8 +1,9 @@
 "use client";
 
 import { AnimatePresence, motion } from "framer-motion";
-import { useEffect, useState, type ButtonHTMLAttributes, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ButtonHTMLAttributes, type ReactNode } from "react";
 import type { Expression } from "@/lib/expression";
+import { sfx } from "@/lib/sfx";
 import { useGame } from "@/store/game";
 import { Portrait, suspectSeed } from "./Portrait";
 
@@ -110,20 +111,37 @@ export function StressMeter({ value, compact }: { value: number; compact?: boole
   );
 }
 
-export function Countdown({ endsAt }: { endsAt: number | null }) {
+/** Seconds left at which the timer starts ticking and pulsing. */
+const URGENT_S = 10;
+
+export function Countdown({ endsAt, ticking }: { endsAt: number | null; ticking?: boolean }) {
   const [now, setNow] = useState(() => Date.now());
+  const lastTick = useRef<number | null>(null);
   useEffect(() => {
-    const t = setInterval(() => setNow(Date.now()), 500);
+    const t = setInterval(() => setNow(Date.now()), 250);
     return () => clearInterval(t);
   }, []);
+  const left = endsAt ? Math.max(0, Math.ceil((endsAt - now) / 1000)) : 0;
+  useEffect(() => {
+    if (!ticking || !endsAt || left > URGENT_S || left === 0 || lastTick.current === left) return;
+    lastTick.current = left;
+    sfx.tick();
+  }, [left, ticking, endsAt]);
   if (!endsAt) return null;
-  const left = Math.max(0, Math.round((endsAt - now) / 1000));
   const mm = Math.floor(left / 60);
   const ss = String(left % 60).padStart(2, "0");
+  const urgent = left <= URGENT_S;
   return (
-    <span className={cx("font-mono tabular-nums", left <= 15 ? "text-blood-400" : "text-ink-100")} aria-label={`${left} seconds left`}>
+    <motion.span
+      key={urgent ? left : "calm"}
+      initial={urgent ? { scale: 1.35 } : false}
+      animate={{ scale: 1 }}
+      transition={{ type: "spring", stiffness: 400, damping: 15 }}
+      className={cx("inline-block font-mono tabular-nums", urgent ? "font-bold text-blood-400" : left <= 30 ? "text-clue-300" : "text-ink-100")}
+      aria-label={`${left} seconds left`}
+    >
       {mm}:{ss}
-    </span>
+    </motion.span>
   );
 }
 

@@ -6,6 +6,7 @@ import { sfx } from "@/lib/sfx";
 import { useGame, useMe } from "@/store/game";
 import { Transcript } from "./Chat";
 import { Portrait, suspectSeed } from "./Portrait";
+import { ReportCard } from "./ReportCard";
 import { Scene } from "./Scene";
 import { Avatar, Button, Panel, Spinner, cx } from "./ui";
 
@@ -104,8 +105,14 @@ export function Reveal() {
         <p className="mx-auto mt-4 max-w-2xl font-type text-[15px] leading-relaxed text-ink-300">{reveal.summary}</p>
       </motion.div>
 
+      <VoteTally />
+
+      <div className="mt-6">
+        <ReportCard startDelay={3.4} />
+      </div>
+
       <div className="mt-10 grid gap-5 lg:grid-cols-2">
-        <motion.div {...appear(2.8)}>
+        <motion.div {...appear(4.4)}>
           <Panel title="Who was closest">
             <ol className="divide-y divide-ink-700/70">
               {reveal.scores.map((s, i) => (
@@ -127,12 +134,12 @@ export function Reveal() {
           </Panel>
         </motion.div>
 
-        <motion.div {...appear(3)}>
+        <motion.div {...appear(4.6)}>
           <Panel title="The true timeline">
             <ol className="relative space-y-3 p-4 pl-8">
               <span className="absolute bottom-4 left-[18px] top-4 w-px bg-ink-600" />
               {reveal.timeline.map((e, i) => (
-                <motion.li key={i} initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 3.2 + i * 0.12 }} className="relative">
+                <motion.li key={i} initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 4.8 + i * 0.12 }} className="relative">
                   <span className="absolute -left-[18px] top-1.5 h-2.5 w-2.5 rounded-full bg-blood-500 ring-4 ring-ink-900" />
                   <span className="font-mono text-sm text-clue-400">{e.t}</span> <span className="text-[15px]">{e.event}</span>
                 </motion.li>
@@ -142,7 +149,7 @@ export function Reveal() {
         </motion.div>
       </div>
 
-      <motion.div {...appear(3.4)} className="mt-5">
+      <motion.div {...appear(4.8)} className="mt-5">
         <Panel title="How the evidence fit">
           <ul className="grid gap-3 p-4 sm:grid-cols-2">
             {reveal.clues.map((c) => {
@@ -164,7 +171,7 @@ export function Reveal() {
         </Panel>
       </motion.div>
 
-      <motion.div {...appear(3.7)} className="mt-5">
+      <motion.div {...appear(5)} className="mt-5">
         <Panel title="What everyone was hiding">
           <ul className="grid gap-3 p-4 md:grid-cols-2">
             {reveal.suspects.map((s) => {
@@ -196,7 +203,7 @@ export function Reveal() {
         </Panel>
       </motion.div>
 
-      <motion.div {...appear(4)} className="mt-6 flex flex-wrap items-center justify-between gap-4">
+      <motion.div {...appear(5.2)} className="mt-6 flex flex-wrap items-center justify-between gap-4">
         <p className="text-sm text-ink-400">
           {Math.floor(reveal.stats.durationSec / 60)}m {reveal.stats.durationSec % 60}s · {reveal.stats.tokens.toLocaleString()} tokens · $
           {reveal.stats.costUsd.toFixed(3)} in model calls
@@ -215,5 +222,72 @@ export function Reveal() {
         </Panel>
       )}
     </div>
+  );
+}
+
+/** The jury's verdict: each detective's vote drops onto the suspect they accused, then the killer lights up. */
+function VoteTally() {
+  const reveal = useGame((s) => s.reveal)!;
+  const view = useGame((s) => s.view)!;
+  const suspects = view.case!.suspects;
+  const me = useGame((s) => s.playerId);
+  const voters = view.players.filter((p) => reveal.votes[p.id]);
+  const START = 2.6;
+
+  useEffect(() => {
+    const timers = voters.map((_, i) => setTimeout(() => sfx.deal(), (START + 0.2 + i * 0.22) * 1000));
+    return () => timers.forEach(clearTimeout);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reveal]);
+
+  return (
+    <motion.section {...appear(START)} className="mt-8">
+      <p className="text-center font-type text-xs uppercase tracking-[0.4em] text-ink-400">The verdict</p>
+      <ul className="mt-3 flex flex-wrap justify-center gap-3">
+        {suspects.map((s) => {
+          const isKiller = s.id === reveal.killerId;
+          const votes = voters.filter((p) => reveal.votes[p.id] === s.id);
+          return (
+            <li
+              key={s.id}
+              className={cx(
+                "relative flex w-[132px] flex-col items-center rounded-2xl border px-2 pb-3 pt-2 transition",
+                isKiller ? "border-blood-500/70 bg-blood-900/40 shadow-[0_0_30px_rgb(220_38_38/0.35)]" : "border-ink-700 bg-ink-900/70",
+              )}
+            >
+              <Avatar id={s.id} name={s.name} size={64} expression={isKiller ? (reveal.playersWon ? "broken" : "smug") : "relieved"} />
+              <p className="mt-1.5 w-full truncate text-center text-xs font-semibold">{s.name}</p>
+              <div className="mt-2 flex min-h-[26px] flex-wrap justify-center gap-1">
+                {votes.map((p) => (
+                  <motion.span
+                    key={p.id}
+                    initial={{ y: -40, opacity: 0, scale: 0.5 }}
+                    animate={{ y: 0, opacity: 1, scale: 1 }}
+                    transition={{ delay: START + 0.2 + voters.indexOf(p) * 0.22, type: "spring", stiffness: 300, damping: 14 }}
+                    title={p.name}
+                    className={cx(
+                      "grid h-6 w-6 place-items-center rounded-full text-[11px] font-bold",
+                      p.id === me ? "bg-clue-400 text-ink-950" : "bg-ink-600 text-ink-100",
+                    )}
+                  >
+                    {p.name[0]?.toUpperCase()}
+                  </motion.span>
+                ))}
+              </div>
+              {isKiller && (
+                <motion.span
+                  initial={{ scale: 2.4, opacity: 0, rotate: -20 }}
+                  animate={{ scale: 1, opacity: 1, rotate: -8 }}
+                  transition={{ delay: START + 0.4 + voters.length * 0.22, type: "spring", stiffness: 240, damping: 12 }}
+                  className="stamp absolute -top-3 right-1 bg-ink-950/80 text-[11px] font-bold text-blood-400"
+                >
+                  Killer
+                </motion.span>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+    </motion.section>
   );
 }

@@ -7,6 +7,7 @@ import { EXPRESSION_LABEL, expressionFor } from "@/lib/expression";
 import { sfx } from "@/lib/sfx";
 import { useGame, useMe, type UiMessage } from "@/store/game";
 import { Board } from "./board/Board";
+import { useBurst, type BurstKind } from "./fx/Burst";
 import { useRoomBoard } from "./board/sources";
 import { MessageItem, Spoken } from "./Chat";
 import { Portrait, suspectSeed } from "./Portrait";
@@ -57,7 +58,7 @@ function useTypewriter(id: string | undefined, text: string, active: boolean) {
 // Lineup
 // ---------------------------------------------------------------------------
 
-function LineupCard({ s, theme, selected, onSelect, last, count }: { s: PublicSuspect; theme: string; selected: boolean; onSelect: () => void; last?: UiMessage; count: number }) {
+function LineupCard({ s, index, theme, selected, onSelect, last, count }: { s: PublicSuspect; index: number; theme: string; selected: boolean; onSelect: () => void; last?: UiMessage; count: number }) {
   const expression = expressionFor(last, s);
   const waiting = last?.status === "pending";
   return (
@@ -71,6 +72,7 @@ function LineupCard({ s, theme, selected, onSelect, last, count }: { s: PublicSu
       <div className={cx("relative shrink-0 overflow-hidden rounded-lg bg-gradient-to-b from-[#3a3046] to-[#15111c]", s.confessed && "ring-2 ring-blood-500")}>
         <Portrait seed={suspectSeed(s, theme)} expression={expression} crop="head" size={62} />
         {waiting && <span className="absolute right-1 top-1 h-2.5 w-2.5 animate-ping rounded-full bg-clue-400" />}
+        <kbd className="absolute bottom-1 left-1 rounded bg-black/70 px-1 font-mono text-[10px] text-ink-300">{index + 1}</kbd>
       </div>
       <span className="min-w-0 flex-1">
         <span className="flex items-center gap-1.5">
@@ -113,10 +115,11 @@ function SuspectLineup() {
   return (
     <Panel title="The suspects">
       <ul className="flex gap-2 overflow-x-auto p-2 lg:flex-col lg:overflow-visible">
-        {suspects.map((s) => (
+        {suspects.map((s, i) => (
           <li key={s.id} className="min-w-[220px] lg:min-w-0">
             <LineupCard
               s={s}
+              index={i}
               theme={theme}
               selected={selected === s.id}
               onSelect={() => {
@@ -137,6 +140,21 @@ function SuspectLineup() {
 // Stage: the suspect in the interrogation room
 // ---------------------------------------------------------------------------
 
+interface Reaction {
+  key: number;
+  delta: number;
+  label: string;
+}
+
+function reactionLabel(delta: number, stress: number): string {
+  if (delta < 0) return "regains composure";
+  if (stress >= 80) return "on the verge of breaking!";
+  if (delta >= 15) return "critical hit!";
+  if (delta >= 10) return "nerve struck!";
+  if (delta >= 5) return "that rattled them";
+  return "a flicker of doubt";
+}
+
 function Stage({ suspect, latest, talking }: { suspect: PublicSuspect; latest?: UiMessage; talking: boolean }) {
   const theme = useGame((s) => s.view!.theme);
   const clue = useGame((s) => (latest?.clueId ? s.view?.clues.find((c) => c.id === latest.clueId) : undefined));
@@ -144,20 +162,30 @@ function Stage({ suspect, latest, talking }: { suspect: PublicSuspect; latest?: 
   const shake = useAnimationControls();
   const [flashKey, setFlashKey] = useState(0);
   const [pulse, setPulse] = useState(0);
-  const prevStress = useRef(suspect.stress);
+  const [reactions, setReactions] = useState<Reaction[]>([]);
+  const prev = useRef({ id: suspect.id, stress: suspect.stress });
   const confessionSeen = useRef<string | null>(null);
 
+  // Show every change in nerves, so players can tell when a line of questioning is working.
   useEffect(() => {
-    if (suspect.stress - prevStress.current >= 5) {
-      setPulse((p) => p + 1);
-      if (suspect.stress >= 70) sfx.tension();
+    const switched = prev.current.id !== suspect.id;
+    const delta = suspect.stress - prev.current.stress;
+    prev.current = { id: suspect.id, stress: suspect.stress };
+    if (switched) {
+      setReactions([]);
+      return;
     }
-    prevStress.current = suspect.stress;
-  }, [suspect.stress]);
-
-  useEffect(() => {
-    prevStress.current = suspect.stress;
-  }, [suspect.id]); // eslint-disable-line react-hooks/exhaustive-deps
+    if (Math.abs(delta) < 2) return;
+    const reaction: Reaction = { key: Date.now(), delta, label: reactionLabel(delta, suspect.stress) };
+    setReactions((r) => [...r.slice(-2), reaction]);
+    setTimeout(() => setReactions((r) => r.filter((x) => x.key !== reaction.key)), 2200);
+    if (delta >= 5) setPulse((p) => p + 1);
+    if (delta >= 10) {
+      sfx.hit();
+      void shake.start({ x: [0, -8, 7, -4, 2, 0], transition: { duration: 0.4 } });
+    }
+    if (suspect.stress >= 70 && delta > 0) sfx.tension();
+  }, [suspect.id, suspect.stress, shake]);
 
   useEffect(() => {
     if (latest?.confession && latest.status === "done" && confessionSeen.current !== latest.id) {
@@ -224,6 +252,32 @@ function Stage({ suspect, latest, talking }: { suspect: PublicSuspect; latest?: 
           <p className="mt-1.5 text-[11px] text-ink-300">
             Looks <span className="font-semibold text-ink-100">{suspect.confessed ? "broken" : EXPRESSION_LABEL[expression]}</span>
           </p>
+        </div>
+
+        <div className="pointer-events-none absolute right-3 top-24 z-40 flex flex-col items-end gap-1 sm:right-6">
+          <AnimatePresence>
+            {reactions.map((r) => (
+              <motion.div
+                key={r.key}
+                initial={{ opacity: 0, y: 20, scale: 0.6 }}
+                animate={{ opacity: 1, y: 0, scale: r.delta >= 10 ? 1.15 : 1 }}
+                exit={{ opacity: 0, y: -30 }}
+                transition={{ type: "spring", stiffness: 300, damping: 14 }}
+                className="text-right"
+              >
+                <span
+                  className={cx(
+                    "font-display text-xl font-extrabold italic drop-shadow-[0_3px_0_#000] sm:text-3xl",
+                    r.delta > 0 ? (r.delta >= 10 ? "text-blood-400" : "text-clue-300") : "text-mint-400",
+                  )}
+                >
+                  {r.delta > 0 ? "+" : ""}
+                  {r.delta} nerves
+                </span>
+                <span className="block font-type text-[10px] uppercase tracking-widest text-white drop-shadow-[0_2px_0_#000] sm:text-xs">{r.label}</span>
+              </motion.div>
+            ))}
+          </AnimatePresence>
         </div>
 
         <AnimatePresence>
@@ -316,7 +370,43 @@ function DialogueBox({ suspect, latest, tw }: { suspect: PublicSuspect; latest?:
   );
 }
 
-function Composer({ suspectId }: { suspectId: string }) {
+interface Tactic {
+  id: string;
+  icon: string;
+  label: string;
+  hint: string;
+  burst?: BurstKind;
+  question: (ctx: { timeOfDeath: string; quote: string | null }) => string | null;
+}
+
+/** Interrogation approaches (in the spirit of L.A. Noire's press / doubt / accuse), each a ready-made question. */
+const TACTICS: Tactic[] = [
+  {
+    id: "press",
+    icon: "✋",
+    label: "Press",
+    hint: "Push on their last answer",
+    burst: "hold-it",
+    question: ({ quote }) => (quote ? `Hold on. You said "${quote}" Explain exactly what you mean by that.` : null),
+  },
+  { id: "doubt", icon: "🤨", label: "Doubt", hint: "Tell them it doesn't add up", burst: "hold-it", question: () => "I don't believe you. That doesn't add up - try again, and this time tell me the truth." },
+  { id: "alibi", icon: "🕐", label: "Alibi", hint: "Where were they?", question: ({ timeOfDeath }) => `Where exactly were you at ${timeOfDeath}, and who can confirm it?` },
+  { id: "witness", icon: "👁️", label: "Witness", hint: "What did they see?", question: () => "What did you see or hear tonight? Every detail." },
+  { id: "motive", icon: "💰", label: "Motive", hint: "What did they gain?", question: () => "How did you really get along with the victim? What did you stand to gain?" },
+  { id: "secret", icon: "🤐", label: "Secrets", hint: "What are they hiding?", question: () => "You're hiding something. What is it?" },
+  { id: "accuse", icon: "☝️", label: "Accuse", hint: "Point the finger", burst: "objection", question: () => "I think you did it. Convince me I'm wrong." },
+];
+
+/** The first spoken sentence of a reply, without stage directions, short enough to quote back. */
+function quotable(reply: string | undefined): string | null {
+  if (!reply) return null;
+  const spoken = reply.replace(/\*[^*]*\*/g, " ").replace(/\s+/g, " ").trim();
+  const sentence = spoken.match(/[^.!?]{12,}[.!?]/)?.[0]?.trim() ?? spoken;
+  if (!sentence) return null;
+  return sentence.length > 90 ? `${sentence.slice(0, 87).trimEnd()}...` : sentence;
+}
+
+function Composer({ suspectId, lastReply }: { suspectId: string; lastReply?: string }) {
   const ask = useGame((s) => s.ask);
   const present = useGame((s) => s.present);
   const pendingClueId = useGame((s) => s.pendingClueId);
@@ -328,16 +418,21 @@ function Composer({ suspectId }: { suspectId: string }) {
   const [text, setText] = useState("");
   const [isPrivate, setPrivate] = useState(false);
   const [sending, setSending] = useState(false);
+  const [armed, setArmed] = useState<{ burst?: BurstKind; text: string } | null>(null);
+  const fire = useBurst((s) => s.fire);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
+  const quote = quotable(lastReply);
   const left = me?.questionsLeft ?? 0;
   const first = suspect.name.split(" ").find((w) => !/^(Lady|Lord|Doctor|Dr\.?|Mr\.?|Mrs\.?|Miss|Sir)$/i.test(w)) ?? suspect.name;
 
-  const suggestions = [
-    `Where were you at ${timeOfDeath}?`,
-    "What did you see or hear tonight?",
-    "How did you get along with the victim?",
-    "What are you hiding?",
-    "Who do you think did it?",
-  ];
+  function pickTactic(t: Tactic) {
+    const q = t.question({ timeOfDeath, quote });
+    if (!q) return;
+    sfx.click();
+    setText(q);
+    setArmed({ burst: t.burst, text: q });
+    inputRef.current?.focus();
+  }
 
   async function send(question = text) {
     const q = question.trim();
@@ -345,13 +440,15 @@ function Composer({ suspectId }: { suspectId: string }) {
     setSending(true);
     try {
       if (pendingClueId) {
-        sfx.present();
+        fire("take-that");
         await present(suspectId, pendingClueId, q, isPrivate);
       } else {
-        sfx.click();
+        if (armed?.burst && armed.text === q) fire(armed.burst);
+        else sfx.click();
         await ask(suspectId, q, isPrivate);
       }
       setText("");
+      setArmed(null);
     } catch {
       /* toast already shown */
     } finally {
@@ -371,21 +468,42 @@ function Composer({ suspectId }: { suspectId: string }) {
           </button>
         </motion.div>
       )}
-      {!text && !clue && (
-        <div className="scrollbar-thin mb-2 flex gap-1.5 overflow-x-auto pb-1">
-          {suggestions.map((s) => (
-            <button
-              key={s}
-              onClick={() => setText(s)}
-              className="shrink-0 rounded-full border border-ink-700 bg-ink-850 px-3 py-1 text-xs text-ink-300 transition hover:border-clue-400/60 hover:text-ink-100"
-            >
-              {s}
-            </button>
-          ))}
+      {!clue && (
+        <div className="mb-2 grid grid-cols-4 gap-1.5 sm:grid-cols-7" role="toolbar" aria-label="Interrogation approaches">
+          {TACTICS.map((t) => {
+            const disabled = t.id === "press" && !quote;
+            const active = !!armed && armed.text === text && text === t.question({ timeOfDeath, quote });
+            return (
+              <motion.button
+                key={t.id}
+                type="button"
+                disabled={disabled || left <= 0}
+                whileHover={disabled ? undefined : { y: -2 }}
+                whileTap={{ scale: 0.94 }}
+                onClick={() => pickTactic(t)}
+                title={disabled ? "Ask something first, then press them on the answer" : t.hint}
+                className={cx(
+                  "group flex min-w-0 flex-col items-center gap-0.5 rounded-xl border px-1.5 py-1.5 text-center transition disabled:cursor-not-allowed disabled:opacity-35",
+                  active
+                    ? t.burst === "objection"
+                      ? "border-blood-500 bg-blood-900/60"
+                      : "border-clue-400 bg-clue-900/60"
+                    : t.burst
+                      ? "border-blood-500/30 bg-ink-850 hover:border-blood-500/70"
+                      : "border-ink-700 bg-ink-850 hover:border-clue-400/60",
+                )}
+              >
+                <span className="text-lg leading-none">{t.icon}</span>
+                <span className="block w-full truncate text-xs font-bold leading-tight text-ink-100">{t.label}</span>
+                <span className="hidden w-full truncate text-[10px] leading-tight text-ink-400 xl:block">{t.hint}</span>
+              </motion.button>
+            );
+          })}
         </div>
       )}
       <div className="flex items-end gap-2">
         <textarea
+          ref={inputRef}
           value={text}
           maxLength={MAX_QUESTION_CHARS}
           rows={2}
@@ -399,8 +517,14 @@ function Composer({ suspectId }: { suspectId: string }) {
           placeholder={clue ? `What do you want to ask ${first} about this? (optional)` : `Question ${first}...`}
           className="min-h-[52px] flex-1 resize-none rounded-xl border border-ink-600 bg-ink-850 px-3 py-2.5 text-[15px] outline-none placeholder:text-ink-400 focus:border-clue-400/70"
         />
-        <Button variant={clue ? "clue" : "primary"} onClick={() => void send()} disabled={sending || left <= 0 || (!text.trim() && !clue)} className="h-[52px] px-5">
-          {clue ? "Present" : "Ask"}
+        <Button
+          variant={clue ? "clue" : armed?.burst === "objection" && armed.text === text ? "danger" : "primary"}
+          onClick={() => void send()}
+          disabled={sending || left <= 0 || (!text.trim() && !clue)}
+          className="h-[52px] px-5"
+        >
+          {clue ? "Take that!" : armed?.burst && armed.text === text ? (armed.burst === "objection" ? "Objection!" : "Hold it!") : "Ask"}
+          <kbd className="hidden rounded bg-black/25 px-1 text-[10px] font-normal sm:inline">↵</kbd>
         </Button>
       </div>
       <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-xs">
@@ -453,7 +577,7 @@ function InterrogationRoom() {
     <div className="space-y-3">
       <Stage suspect={suspect} latest={latest} talking={tw.typing} />
       <DialogueBox suspect={suspect} latest={latest} tw={tw} />
-      <Composer suspectId={suspectId} />
+      <Composer suspectId={suspectId} lastReply={latest?.status === "done" ? latest.reply : undefined} />
       {history.length > 0 && (
         <div className="rounded-2xl border border-ink-700/80 bg-ink-900/80">
           <button onClick={() => setShowLog((v) => !v)} className="flex w-full items-center justify-between px-4 py-2.5 text-xs font-semibold uppercase tracking-[0.18em] text-ink-300">
@@ -545,9 +669,52 @@ function RoomBoard() {
   return <Board source={source} className="h-[680px]" />;
 }
 
+/** Game-style shortcuts: number keys switch suspect, Esc puts the evidence back. */
+function useInterrogationKeys() {
+  const suspects = useGame((s) => s.view!.case!.suspects);
+  const select = useGame((s) => s.selectSuspect);
+  const pickClue = useGame((s) => s.pickClue);
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const el = e.target as HTMLElement | null;
+      if (e.metaKey || e.ctrlKey || e.altKey || el?.closest("input, textarea, [contenteditable=true]")) return;
+      const n = Number(e.key);
+      if (Number.isInteger(n) && n >= 1 && n <= suspects.length) {
+        sfx.click();
+        select(suspects[n - 1].id);
+      } else if (e.key === "Escape") {
+        pickClue(null);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [suspects, select, pickClue]);
+}
+
+function KeyHints() {
+  const count = useGame((s) => s.view!.case!.suspects.length);
+  const keys: [string, string][] = [
+    [`1-${count}`, "switch suspect"],
+    ["↵", "ask"],
+    ["Esc", "put evidence back"],
+    ["B", "detective board"],
+  ];
+  return (
+    <p className="mt-3 hidden flex-wrap items-center justify-center gap-x-4 gap-y-1 text-[11px] text-ink-400 lg:flex">
+      {keys.map(([k, label]) => (
+        <span key={k} className="flex items-center gap-1.5">
+          <kbd className="rounded border border-ink-600 bg-ink-850 px-1.5 py-0.5 font-mono text-[10px] text-ink-300 shadow-[0_2px_0_var(--color-ink-700)]">{k}</kbd>
+          {label}
+        </span>
+      ))}
+    </p>
+  );
+}
+
 export function Interrogation() {
   const [tab, setTab] = useState<"room" | "board">("room");
   const selected = useGame((s) => s.view!.case!.suspects.find((x) => x.id === s.selectedSuspectId));
+  useInterrogationKeys();
   return (
     <div className="grid gap-4 lg:grid-cols-[250px_minmax(0,1fr)_320px]">
       <div className="min-w-0 lg:sticky lg:top-20 lg:self-start">
@@ -566,7 +733,10 @@ export function Interrogation() {
           ))}
         </div>
         {tab === "room" ? (
-          <InterrogationRoom />
+          <>
+            <InterrogationRoom />
+            <KeyHints />
+          </>
         ) : (
           <div className="overflow-hidden rounded-2xl border border-ink-700/80">
             <RoomBoard />

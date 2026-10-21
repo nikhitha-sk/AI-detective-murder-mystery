@@ -1,6 +1,6 @@
 "use client";
 
-import type { ChatMessage, NoteAddInput, NoteItem, RevealPayload, RoomView, Theme, ThemeInput } from "@mystery/shared";
+import type { ChatMessage, NoteAddInput, NoteItem, PublicClue, RevealPayload, RoomView, Theme, ThemeInput } from "@mystery/shared";
 import { create } from "zustand";
 import { getPlayerId, saveName } from "@/lib/identity";
 import { sfx } from "@/lib/sfx";
@@ -28,6 +28,8 @@ interface GameState {
   selectedSuspectId: string | null;
   /** Clue the player has picked to present next. */
   pendingClueId: string | null;
+  /** Evidence just unlocked, waiting to be dealt onto the table. */
+  dealt: PublicClue[];
 
   connect(): void;
   createRoom(name: string, theme: ThemeInput, solo: boolean): Promise<string>;
@@ -49,6 +51,7 @@ interface GameState {
   pickClue(id: string | null): void;
   toast(text: string, tone?: Toast["tone"]): void;
   dismissToast(id: number): void;
+  clearDealt(): void;
 }
 
 let listenersBound = false;
@@ -73,6 +76,7 @@ export const useGame = create<GameState>((set, get) => {
     toasts: [],
     selectedSuspectId: null,
     pendingClueId: null,
+    dealt: [],
 
     connect() {
       if (listenersBound) return;
@@ -140,8 +144,7 @@ export const useGame = create<GameState>((set, get) => {
         get().toast(error, "error");
       });
       socket.on("clue:unlocked", (clues) => {
-        if (clues.length) sfx.clue();
-        for (const c of clues) get().toast(`New evidence: ${c.text}`, "clue");
+        if (clues.length) set((s) => ({ dealt: [...s.dealt, ...clues.filter((c) => !s.dealt.some((d) => d.id === c.id))] }));
       });
       socket.on("suspect:update", (suspect) => {
         const view = get().view;
@@ -231,6 +234,7 @@ export const useGame = create<GameState>((set, get) => {
     },
 
     dismissToast: (id) => set((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) })),
+    clearDealt: () => set({ dealt: [] }),
   };
 });
 

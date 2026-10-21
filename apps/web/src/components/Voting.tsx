@@ -2,9 +2,11 @@
 
 import { AnimatePresence, motion } from "framer-motion";
 import { useState } from "react";
+import { saveAccusationEvidence } from "@/lib/career";
 import { baselineExpression } from "@/lib/expression";
 import { sfx } from "@/lib/sfx";
 import { useGame, useMe } from "@/store/game";
+import { useBurst } from "./fx/Burst";
 import { Portrait, suspectSeed } from "./Portrait";
 import { Button, StressMeter, cx } from "./ui";
 
@@ -14,6 +16,8 @@ export function Voting() {
   const me = useMe();
   const [choice, setChoice] = useState<string | null>(null);
   const [submitted, setSubmitted] = useState(false);
+  const [evidence, setEvidence] = useState<string | null>(null);
+  const fire = useBurst((s) => s.fire);
   const voted = me?.hasVoted || submitted;
   const waitingOn = view.players.filter((p) => p.connected && !p.hasVoted);
   const suspects = view.case!.suspects;
@@ -97,6 +101,48 @@ export function Voting() {
         ))}
       </div>
 
+      <AnimatePresence>
+        {chosen && !voted && view.clues.length > 0 && (
+          <motion.section
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0 }}
+            className="mt-8 rounded-2xl border border-clue-400/30 bg-gradient-to-b from-clue-900/40 to-ink-900/80 p-4 sm:p-5"
+          >
+            <div className="flex flex-wrap items-baseline justify-between gap-2">
+              <h2 className="font-display text-xl font-bold">
+                Make your case: what proves <span className="text-clue-300">{chosen.name}</span> did it?
+              </h2>
+              <span className="text-xs text-ink-400">Optional · the right key exhibit earns bonus XP</span>
+            </div>
+            <ul className="scrollbar-thin mt-3 flex gap-3 overflow-x-auto pb-2">
+              {view.clues.map((c) => {
+                const picked = evidence === c.id;
+                return (
+                  <li key={c.id} className="shrink-0">
+                    <motion.button
+                      type="button"
+                      whileHover={{ y: -4, rotate: 0 }}
+                      animate={{ rotate: picked ? 0 : Number(c.id.replace(/\D/g, "")) % 2 ? 1 : -1, scale: picked ? 1.04 : 1 }}
+                      onClick={() => {
+                        sfx.click();
+                        setEvidence(picked ? null : c.id);
+                      }}
+                      className={cx("paper block w-56 rounded-sm p-3 text-left shadow-lg transition", picked && "ring-4 ring-clue-400")}
+                    >
+                      <span className="font-type text-[10px] uppercase tracking-widest opacity-60">
+                        Exhibit {c.id} {picked && "· your proof"}
+                      </span>
+                      <span className="mt-1 line-clamp-4 block font-type text-xs leading-snug">{c.text}</span>
+                    </motion.button>
+                  </li>
+                );
+              })}
+            </ul>
+          </motion.section>
+        )}
+      </AnimatePresence>
+
       <div className="mt-8 flex flex-col items-center gap-3">
         {voted ? (
           <motion.div initial={{ scale: 2.5, opacity: 0, rotate: -15 }} animate={{ scale: 1, opacity: 1, rotate: -6 }} className="stamp text-2xl font-bold text-blood-400">
@@ -109,12 +155,14 @@ export function Voting() {
             disabled={!choice}
             onClick={() => {
               if (!choice) return;
-              sfx.stamp();
+              fire("objection");
+              setTimeout(() => sfx.stamp(), 500);
+              saveAccusationEvidence(view.code, view.case!.title, evidence);
               setSubmitted(true);
               vote(choice).catch(() => setSubmitted(false));
             }}
           >
-            {chosen ? `I accuse ${chosen.name}` : "Pick a suspect"}
+            {chosen ? `☝️ I accuse ${chosen.name}${evidence ? ` (exhibit ${evidence})` : ""}` : "Pick a suspect"}
           </Button>
         )}
         {voted && (

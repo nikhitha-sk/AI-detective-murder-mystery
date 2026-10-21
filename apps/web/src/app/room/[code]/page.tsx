@@ -12,6 +12,8 @@ import { PhaseBanner } from "@/components/PhaseBanner";
 import { Reveal } from "@/components/Reveal";
 import { RoomHeader } from "@/components/RoomHeader";
 import { Scene } from "@/components/Scene";
+import { BurstOverlay } from "@/components/fx/Burst";
+import { EvidenceDeal } from "@/components/fx/EvidenceDeal";
 import { Button, Spinner, Toasts } from "@/components/ui";
 import { Voting } from "@/components/Voting";
 import { getSavedName } from "@/lib/identity";
@@ -112,6 +114,8 @@ export default function RoomPage() {
         {view.phase === "voting" && <Voting />}
         {view.phase === "reveal" && <Reveal />}
       </main>
+      <EvidenceDeal />
+      <BurstOverlay />
       <Toasts />
     </div>
   );

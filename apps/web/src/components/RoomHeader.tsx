@@ -94,7 +94,7 @@ export function RoomHeader() {
           <SoundToggle />
           {view.phaseEndsAt && (
             <span className="rounded-md border border-ink-700 bg-ink-850 px-2.5 py-1 text-base">
-              <Countdown endsAt={view.phaseEndsAt} />
+              <Countdown endsAt={view.phaseEndsAt} ticking />
             </span>
           )}
           {isHost && SKIP_LABEL[view.phase] && (

@@ -90,6 +90,27 @@ export const sfx = {
     tone(330, 0.5, { gain: 0.04, delay: 0.05 });
   },
   tension: () => tone(110, 0.9, { type: "sawtooth", gain: 0.025, slideTo: 82 }),
+  /** "TAKE THAT!": a slam, then a bright stab chord. */
+  objection() {
+    noise(0.25, { gain: 0.45, filter: 900 });
+    tone(70, 0.35, { type: "square", gain: 0.07, slideTo: 45 });
+    for (const [f, d] of [[523, 0.06], [659, 0.06], [784, 0.06], [1047, 0.09]] as const) tone(f, 0.45, { type: "sawtooth", gain: 0.025, delay: d });
+  },
+  /** A question landed: the suspect's nerves jumped. */
+  hit() {
+    tone(196, 0.16, { type: "square", gain: 0.05, slideTo: 98 });
+    noise(0.08, { gain: 0.15, filter: 1500 });
+  },
+  /** Countdown tick in the last seconds of a phase. */
+  tick: () => tone(1400, 0.03, { type: "square", gain: 0.025 }),
+  /** Card dealt onto the table. */
+  deal: () => noise(0.07, { gain: 0.12, filter: 2400 }),
+  /** Score counter. */
+  blip: () => tone(980, 0.04, { type: "triangle", gain: 0.03 }),
+  /** Badge earned or rank up: a rising arpeggio. */
+  reward() {
+    [523, 659, 784, 1047, 1319].forEach((f, i) => tone(f, 0.28, { type: "triangle", gain: 0.05, delay: i * 0.07 }));
+  },
 };
 
 export function setMuted(m: boolean) {
