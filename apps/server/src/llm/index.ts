@@ -5,7 +5,7 @@ import { MockProvider } from "./mock";
 import type { LlmProvider } from "./types";
 
 export function createLlm(config: Config): LlmProvider {
-  const models = { main: config.modelMain, suspect: config.modelSuspect, guard: config.modelGuard };
+  const models = { main: config.modelMain, suspect: config.modelSuspect, guard: config.modelGuard, solver: config.modelSolver };
   if (config.llmMode === "mock") return new MockProvider();
   if (config.llmMode === "groq") {
     if (!config.groqApiKey) throw new Error("LLM_PROVIDER=groq needs GROQ_API_KEY in .env");

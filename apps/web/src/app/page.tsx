@@ -1,6 +1,6 @@
 "use client";
 
-import { THEMES, type ThemeId } from "@mystery/shared";
+import { THEMES, sceneOf, themeInput, type SceneStyle, type Theme } from "@mystery/shared";
 import { AnimatePresence, motion } from "framer-motion";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -14,6 +14,7 @@ import type { Expression } from "@/lib/expression";
 import { getSavedName, saveName } from "@/lib/identity";
 import { sfx } from "@/lib/sfx";
 import { SERVER_URL } from "@/lib/socket";
+import { allThemes, useThemeLibrary } from "@/lib/themes";
 import { useGame } from "@/store/game";
 
 const STEPS = [
@@ -25,8 +26,10 @@ const STEPS = [
   ["The reveal", "The truth, the timeline, and who was closest"],
 ];
 
+type CastMember = { id: string; name: string; role: string };
+
 /** Sample cast shown on the title screen. */
-const CAST: Record<ThemeId, { id: string; name: string; role: string }[]> = {
+const CAST: Record<string, CastMember[]> = {
   "manor-1920s": [
     { id: "h1", name: "Lady Evelyn Ashford", role: "the widow" },
     { id: "h2", name: "Mr. Silas Crane", role: "butler" },
@@ -48,20 +51,45 @@ const CAST: Record<ThemeId, { id: string; name: string; role: string }[]> = {
     { id: "h4", name: "Ms. Grace Liu", role: "investor" },
     { id: "h5", name: "Mr. Omar Haddad", role: "lead designer" },
   ],
+  "hill-hotel": [
+    { id: "h1", name: "Mrs. Rosamund Fernandes", role: "hotel owner" },
+    { id: "h2", name: "Mr. Thomas Kurian", role: "night manager" },
+    { id: "h3", name: "Miss Leela Iyer", role: "travel writer" },
+    { id: "h4", name: "Dr. Harish Menon", role: "retired surgeon" },
+    { id: "h5", name: "Mr. Victor Sharma", role: "honeymooner" },
+  ],
+  "film-premiere": [
+    { id: "h1", name: "Ms. Anika Kapoor", role: "lead actress" },
+    { id: "h2", name: "Mr. Kabir Malhotra", role: "director" },
+    { id: "h3", name: "Miss Tara Sen", role: "stylist" },
+    { id: "h4", name: "Mr. Farhan Ali", role: "producer" },
+    { id: "h5", name: "Mr. Neil D'Souza", role: "photographer" },
+  ],
+  newsroom: [
+    { id: "h1", name: "Ms. Meera Joshi", role: "political editor" },
+    { id: "h2", name: "Mr. Rahul Verma", role: "data analyst" },
+    { id: "h3", name: "Miss Sana Qureshi", role: "junior reporter" },
+    { id: "h4", name: "Mr. George Mathew", role: "anchor" },
+    { id: "h5", name: "Mr. Aditya Rao", role: "intern" },
+  ],
 };
+
+/** Generated settings borrow the cast of the built-in setting with the same backdrop. */
+const SCENE_CAST: Record<SceneStyle, string> = { manor: "manor-1920s", fest: "college-fest", office: "startup-office" };
+const castFor = (theme: string) => CAST[theme] ?? CAST[SCENE_CAST[sceneOf(theme)]];
 
 const MOODS: Expression[] = ["smug", "nervous", "calm", "surprised", "angry", "thinking", "sad", "neutral"];
 
 type Health = { ok: boolean; llmMode: "groq" | "anthropic" | "mock"; redis: boolean; postgres: boolean } | null | "down";
 
-function TitleCast({ theme }: { theme: ThemeId }) {
+function TitleCast({ theme }: { theme: string }) {
   const [tick, setTick] = useState(0);
   const [hover, setHover] = useState<string | null>(null);
   useEffect(() => {
     const t = setInterval(() => setTick((n) => n + 1), 1900);
     return () => clearInterval(t);
   }, []);
-  const cast = CAST[theme];
+  const cast = castFor(theme);
   return (
     <div className="relative flex items-end justify-center overflow-hidden px-2 pt-6">
       {cast.map((c, i) => {
@@ -97,18 +125,26 @@ export default function Home() {
   const createRoom = useGame((s) => s.createRoom);
   const openBoard = useBoardOverlay((s) => s.setOpen);
   const [name, setName] = useState("");
-  const [theme, setTheme] = useState<ThemeId>("manor-1920s");
+  const [theme, setTheme] = useState<Theme>(THEMES[0]);
+  const library = useThemeLibrary();
+  const loadLibrary = library.load;
   const [joinCode, setJoinCode] = useState("");
   const [busy, setBusy] = useState<null | "create" | "solo" | "join">(null);
   const [health, setHealth] = useState<Health>(null);
 
   useEffect(() => {
     setName(getSavedName());
+    loadLibrary();
     fetch(`${SERVER_URL}/health`)
       .then((r) => r.json())
       .then(setHealth)
       .catch(() => setHealth("down"));
-  }, []);
+  }, [loadLibrary]);
+
+  async function generateMore() {
+    const fresh = await library.generate().catch(() => []);
+    if (fresh[0]) setTheme(fresh[0]);
+  }
 
   const validName = name.trim().length > 0;
 
@@ -117,7 +153,7 @@ export default function Home() {
     sfx.phase();
     setBusy(solo ? "solo" : "create");
     try {
-      const code = await createRoom(name.trim(), theme, solo);
+      const code = await createRoom(name.trim(), themeInput(theme), solo);
       router.push(`/room/${code}`);
     } catch {
       setBusy(null);
@@ -138,8 +174,8 @@ export default function Home() {
   return (
     <main className="min-h-dvh pb-24">
       <AnimatePresence mode="wait">
-        <motion.div key={theme} initial={{ opacity: 0.4 }} animate={{ opacity: 1 }} exit={{ opacity: 0.4 }} transition={{ duration: 0.4 }}>
-          <Scene theme={theme} variant="hero" className="min-h-[640px] border-b border-ink-700/80 lg:min-h-[680px]">
+        <motion.div key={theme.id} initial={{ opacity: 0.4 }} animate={{ opacity: 1 }} exit={{ opacity: 0.4 }} transition={{ duration: 0.4 }}>
+          <Scene theme={theme.id} variant="hero" className="min-h-[640px] border-b border-ink-700/80 lg:min-h-[680px]">
             <div className="mx-auto grid max-w-7xl gap-6 px-4 pt-6 sm:px-6 lg:grid-cols-[1fr_420px] lg:pt-10">
               <div className="flex min-w-0 flex-col">
                 <div className="flex items-center justify-between">
@@ -160,7 +196,7 @@ export default function Home() {
                   then name the killer.
                 </p>
                 <div className="mt-auto pt-8">
-                  <TitleCast theme={theme} />
+                  <TitleCast theme={theme.id} />
                 </div>
               </div>
 
@@ -255,7 +291,13 @@ export default function Home() {
       <section className="mx-auto mt-10 max-w-7xl px-4 sm:px-6">
         <p className="font-type text-xs uppercase tracking-[0.3em] text-clue-400">Choose your setting</p>
         <h2 className="mb-4 font-display text-3xl font-bold">Where did it happen?</h2>
-        <ThemePicker value={theme} onChange={(t) => setTheme(t as ThemeId)} />
+        <ThemePicker
+          themes={allThemes(library.generated, theme)}
+          value={theme.id}
+          onChange={setTheme}
+          onGenerate={() => void generateMore()}
+          generating={library.generating}
+        />
       </section>
 
       <section className="mx-auto mt-12 max-w-7xl px-4 sm:px-6">
@@ -277,7 +319,7 @@ export default function Home() {
           ))}
         </ol>
         <p className="mt-6 text-sm text-ink-400">
-          {THEMES.length} settings · 4-5 suspects per case · solo or up to 6 detectives
+          {THEMES.length} settings, plus as many as the AI can invent · a fresh case every game · 4-5 suspects · solo or up to 6 detectives
         </p>
       </section>
       <Toasts />

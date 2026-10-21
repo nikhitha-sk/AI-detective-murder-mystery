@@ -1,3 +1,5 @@
+import { sceneOf } from "@mystery/shared";
+
 /**
  * Deterministic character looks. The same suspect (id + name + role) always
  * gets the same face, hair and outfit, so every player sees the same cast.
@@ -79,7 +81,8 @@ function pick<T>(r: () => number, items: readonly T[]): T {
 export function traitsFor(seed: { id: string; name: string; role?: string; theme?: string; bio?: string }): Traits {
   const text = `${seed.name} ${seed.role ?? ""}`;
   const r = rng(hash(`${seed.id}|${seed.name}`));
-  const theme = seed.theme ?? "manor-1920s";
+  // Generated settings dress their cast like the built-in setting with the same backdrop.
+  const theme = { manor: "manor-1920s", fest: "college-fest", office: "startup-office" }[sceneOf(seed.theme ?? "manor-1920s")];
 
   const lean = FEMININE.test(text) ? true : MASCULINE.test(text) ? false : pronounLean(seed.bio ?? "");
   const feminine = lean ?? r() < 0.5;

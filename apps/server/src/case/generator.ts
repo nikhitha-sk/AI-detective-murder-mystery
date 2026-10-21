@@ -1,5 +1,5 @@
-import { CaseFileSchema, themeLabel, type CaseFile } from "@mystery/shared";
-import type { LlmProvider } from "../llm/types";
+import { CaseFileSchema, type CaseFile, type Theme } from "@mystery/shared";
+import { RateLimitError, type LlmProvider } from "../llm/types";
 import type { SolverResult, Usage } from "../llm/types";
 import { checkCaseRules } from "./rules";
 import { randomSeeds } from "./seeds";
@@ -22,6 +22,13 @@ export class CaseGenerationError extends Error {
   }
 }
 
+/** Rate-limit pauses allowed per case on top of the attempts (they say nothing about the case itself). */
+const MAX_RATE_LIMIT_WAITS = 2;
+/** Longest pause for a rate limit; anything longer fails the setup so the player isn't left staring at a spinner. */
+const MAX_RATE_LIMIT_WAIT_S = 65;
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
 export type ProgressFn = (p: { attempt: number; step: "generating" | "checking" | "solving"; message: string }) => void;
 
 /**
@@ -31,12 +38,13 @@ export type ProgressFn = (p: { attempt: number; step: "generating" | "checking" 
  */
 export async function generateCase(
   llm: LlmProvider,
-  theme: string,
+  theme: Theme,
   opts: { rounds: number; maxAttempts: number; onProgress?: ProgressFn },
 ): Promise<GeneratedCase> {
   const usage: Usage[] = [];
   let feedback: string[] = [];
   let lastProblem = "unknown error";
+  let rateLimitWaits = 0;
 
   for (let attempt = 1; attempt <= opts.maxAttempts; attempt++) {
     const progress = (step: "generating" | "checking" | "solving", message: string) =>
@@ -44,8 +52,9 @@ export async function generateCase(
     try {
       progress("generating", "Writing the case file...");
       const { raw, usage: u1 } = await llm.generateCase({
-        theme,
-        themeLabel: themeLabel(theme),
+        theme: theme.id,
+        themeLabel: theme.label,
+        themeBlurb: theme.blurb,
         ...randomSeeds(),
         feedback,
       });
@@ -58,7 +67,7 @@ export async function generateCase(
         lastProblem = `schema validation failed (${feedback[0]})`;
         continue;
       }
-      const caseFile: CaseFile = { ...parsed.data, theme };
+      const caseFile: CaseFile = { ...parsed.data, theme: theme.id };
       const problems = checkCaseRules(caseFile, { rounds: opts.rounds });
       if (problems.length) {
         feedback = problems;
@@ -81,6 +90,14 @@ export async function generateCase(
       return { caseFile, attempts: attempt, solver: result, usage };
     } catch (err) {
       lastProblem = err instanceof Error ? err.message : String(err);
+      // The AI being busy says nothing about the case: wait it out and redo this attempt.
+      if (err instanceof RateLimitError && rateLimitWaits < MAX_RATE_LIMIT_WAITS && err.retryAfterS <= MAX_RATE_LIMIT_WAIT_S) {
+        rateLimitWaits++;
+        progress("generating", `The AI is busy (free-tier rate limit). Retrying in ${err.retryAfterS}s...`);
+        await sleep(err.retryAfterS * 1000 + 500);
+        attempt--;
+        continue;
+      }
       feedback = [`The previous attempt failed: ${lastProblem}`];
     }
   }

@@ -6,7 +6,7 @@
  *   npm run cli -- --theme startup-office
  */
 import readline from "node:readline/promises";
-import { THEME_IDS, type ChatMessage, type RevealPayload, type RoomView } from "@mystery/shared";
+import { THEME_IDS, themeById, type ChatMessage, type RevealPayload, type RoomView } from "@mystery/shared";
 import { config } from "../config";
 import { createPersistence } from "../db";
 import { GameEngine, GameError } from "../game/engine";
@@ -81,7 +81,7 @@ function onEvent(event: string, payload: unknown) {
 }
 
 const PLAYER = "cli-player-0001";
-const code = await engine.createRoom(PLAYER, "Detective", theme, true);
+const code = await engine.createRoom(PLAYER, "Detective", themeById(theme), true);
 console.log(c.purple(`\nGenerating a "${theme}" case with ${llm.mode === "mock" ? "the mock provider" : config.modelMain}...`));
 await engine.start(code, PLAYER);
 

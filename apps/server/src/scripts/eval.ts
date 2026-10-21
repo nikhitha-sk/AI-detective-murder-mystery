@@ -6,7 +6,7 @@
  *   npm run eval -- --n 5
  *   npm run eval -- --n 3 --theme college-fest --redteam
  */
-import { THEME_IDS, type CaseFile } from "@mystery/shared";
+import { THEME_IDS, themeById, type CaseFile } from "@mystery/shared";
 import { isConfession } from "../agents/guard";
 import { runSuspectTurn } from "../agents/suspect";
 import { CaseGenerationError, generateCase } from "../case/generator";
@@ -52,7 +52,7 @@ for (const theme of themes) {
     let caseFile: CaseFile | null = null;
     let attempts = config.rules.maxCaseAttempts;
     try {
-      const g = await generateCase(llm, theme, {
+      const g = await generateCase(llm, themeById(theme), {
         rounds: config.rules.rounds,
         maxAttempts: config.rules.maxCaseAttempts,
         onProgress: (p) => process.stdout.write(`\r  ${theme} #${i + 1}: attempt ${p.attempt} - ${p.step}...      `),

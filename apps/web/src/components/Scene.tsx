@@ -1,13 +1,15 @@
 "use client";
 
+import { sceneOf, type SceneStyle } from "@mystery/shared";
 import { AnimatePresence, motion } from "framer-motion";
 import { memo, useEffect, useState, type ReactNode } from "react";
 import { cx } from "./ui";
 
 /**
  * Illustrated, animated backdrop for each theme: a rainy manor study, a
- * festival stage at night, a startup office after hours. Children render on
- * top (portraits, name plates).
+ * festival stage at night, a startup office after hours. Every setting,
+ * built-in or AI-generated, uses one of these three; the tint varies per
+ * setting. Children render on top (portraits, name plates).
  */
 
 type Variant = "hero" | "stage" | "backdrop" | "thumb";
@@ -247,7 +249,25 @@ const THEME_TINT: Record<string, string> = {
   "manor-1920s": "from-[#1a0f1a]",
   "college-fest": "from-[#140a2a]",
   "startup-office": "from-[#0a1220]",
+  "hill-hotel": "from-[#0c1a16]",
+  "film-premiere": "from-[#2a0a12]",
+  newsroom: "from-[#1a1408]",
 };
+
+/** Tints for generated settings, picked from the id so a setting always looks the same. */
+const SCENE_TINTS: Record<SceneStyle, string[]> = {
+  manor: ["from-[#1a0f1a]", "from-[#0c1a16]", "from-[#10131f]", "from-[#1c120a]"],
+  fest: ["from-[#140a2a]", "from-[#2a0a12]", "from-[#0a1a24]", "from-[#22102a]"],
+  office: ["from-[#0a1220]", "from-[#1a1408]", "from-[#0d1a14]", "from-[#16101f]"],
+};
+
+function tintFor(theme: string, scene: SceneStyle) {
+  if (THEME_TINT[theme]) return THEME_TINT[theme];
+  let h = 0;
+  for (const ch of theme) h = (h * 31 + ch.charCodeAt(0)) | 0;
+  const tints = SCENE_TINTS[scene];
+  return tints[Math.abs(h) % tints.length];
+}
 
 function SceneImpl({
   theme,
@@ -272,13 +292,14 @@ function SceneImpl({
   }, [flashKey]);
 
   const thumb = variant === "thumb";
+  const scene = sceneOf(theme);
   return (
-    <div className={cx("relative isolate overflow-hidden bg-gradient-to-b to-ink-950", THEME_TINT[theme] ?? THEME_TINT["manor-1920s"], className)}>
+    <div className={cx("relative isolate overflow-hidden bg-gradient-to-b to-ink-950", tintFor(theme, scene), className)}>
       <div className={cx("absolute inset-0", variant === "stage" && "scene-zoom")}>
-        {theme === "college-fest" ? <FestSvg /> : theme === "startup-office" ? <OfficeSvg /> : <ManorSvg />}
+        {scene === "fest" ? <FestSvg /> : scene === "office" ? <OfficeSvg /> : <ManorSvg />}
       </div>
-      {theme === "manor-1920s" && !thumb && <Rain count={variant === "hero" ? 90 : 50} />}
-      {theme === "manor-1920s" && <div className="lightning-room pointer-events-none absolute inset-0 bg-[#dfe7ff]" />}
+      {scene === "manor" && !thumb && <Rain count={variant === "hero" ? 90 : 50} />}
+      {scene === "manor" && <div className="lightning-room pointer-events-none absolute inset-0 bg-[#dfe7ff]" />}
       {!thumb && <Dust />}
 
       {variant === "stage" && (

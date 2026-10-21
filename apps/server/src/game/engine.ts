@@ -1,6 +1,6 @@
 import { randomInt, randomUUID } from "node:crypto";
 import {
-  THEME_IDS,
+  themeById,
   type CaseFile,
   type ChatMessage,
   type Clue,
@@ -13,11 +13,13 @@ import {
   type RoomView,
   type ServerToClientEvents,
   type SuspectSlice,
+  type Theme,
   type Visibility,
 } from "@mystery/shared";
 import { runSuspectTurn } from "../agents/suspect";
 import { CaseGenerationError, generateCase } from "../case/generator";
 import { buildSlices, publicCase, publicClue } from "../case/slices";
+import { generateThemes } from "../case/themes";
 import type { GameRules } from "../config";
 import type { Persistence } from "../db";
 import { totalCost, totalTokens } from "../llm/pricing";
@@ -34,6 +36,8 @@ import {
   stressDelta,
 } from "./rules";
 import { idleGeneration, keys, type RoomState, type SuspectMemory } from "./state";
+
+const roomTheme = (room: RoomState): Theme => room.themeInfo ?? themeById(room.theme);
 
 /** Errors whose message is safe to show to the player. */
 export class GameError extends Error {}
@@ -170,6 +174,7 @@ export class GameEngine {
       code: room.code,
       hostId: room.hostId,
       theme: room.theme,
+      themeInfo: roomTheme(room),
       solo: room.solo,
       phase: room.machine.value,
       round: room.machine.context.round,
@@ -215,7 +220,7 @@ export class GameEngine {
   // Lobby
   // -------------------------------------------------------------------------
 
-  async createRoom(playerId: string, name: string, theme: string, solo: boolean): Promise<string> {
+  async createRoom(playerId: string, name: string, theme: Theme, solo: boolean): Promise<string> {
     let code = "";
     for (let i = 0; i < 20; i++) {
       code = Array.from({ length: 6 }, () => CODE_ALPHABET[randomInt(CODE_ALPHABET.length)]).join("");
@@ -225,7 +230,8 @@ export class GameEngine {
     const room: RoomState = {
       code,
       hostId: playerId,
-      theme,
+      theme: theme.id,
+      themeInfo: theme,
       solo,
       createdAt: now,
       players: [{ id: playerId, name, connected: true, joinedAt: now }],
@@ -311,12 +317,12 @@ export class GameEngine {
     if (room.hostId !== playerId) throw new GameError("Only the host can do that.");
   }
 
-  async setTheme(code: string, playerId: string, theme: string) {
-    if (!(THEME_IDS as readonly string[]).includes(theme)) throw new GameError("Unknown theme.");
+  async setTheme(code: string, playerId: string, theme: Theme) {
     const room = await this.mutateRoom(code, (room) => {
       this.assertHost(room, playerId);
       if (room.machine.value !== "lobby") throw new GameError("The theme can only be changed in the lobby.");
-      room.theme = theme;
+      room.theme = theme.id;
+      room.themeInfo = theme;
     });
     await this.broadcastState(room);
   }
@@ -361,7 +367,7 @@ export class GameEngine {
         room.phaseEndsAt = null;
         room.generation = { status: "running", attempt: 1, maxAttempts: r.maxCaseAttempts, message: "Writing the case file..." };
         after.push(async () => {
-          void this.runCaseGeneration(room.code, room.theme);
+          void this.runCaseGeneration(room.code, roomTheme(room));
         });
         break;
       case "briefing":
@@ -471,7 +477,14 @@ export class GameEngine {
   // Game setup (flow A)
   // -------------------------------------------------------------------------
 
-  private async runCaseGeneration(code: string, theme: string) {
+  /** New settings for the picker. Not tied to a room: any player can ask, before or between games. */
+  async generateThemes(avoid: string[]): Promise<Theme[]> {
+    const { themes } = await generateThemes(this.deps.llm, avoid);
+    if (!themes.length) throw new GameError("The AI didn't come up with anything new. Try again.");
+    return themes;
+  }
+
+  private async runCaseGeneration(code: string, theme: Theme) {
     const r = this.deps.rules;
     try {
       const generated = await generateCase(this.deps.llm, theme, {

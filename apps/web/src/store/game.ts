@@ -1,10 +1,10 @@
 "use client";
 
-import type { ChatMessage, NoteAddInput, NoteItem, RevealPayload, RoomView } from "@mystery/shared";
+import type { ChatMessage, NoteAddInput, NoteItem, RevealPayload, RoomView, Theme, ThemeInput } from "@mystery/shared";
 import { create } from "zustand";
 import { getPlayerId, saveName } from "@/lib/identity";
 import { sfx } from "@/lib/sfx";
-import { getSocket, request } from "@/lib/socket";
+import { getSocket, request, requestWithin } from "@/lib/socket";
 
 export type UiMessage = ChatMessage & { status: "pending" | "streaming" | "done" | "failed" };
 
@@ -30,10 +30,12 @@ interface GameState {
   pendingClueId: string | null;
 
   connect(): void;
-  createRoom(name: string, theme: string, solo: boolean): Promise<string>;
+  createRoom(name: string, theme: ThemeInput, solo: boolean): Promise<string>;
   joinRoom(code: string, name: string): Promise<void>;
   leaveRoom(): void;
-  setTheme(theme: string): Promise<void>;
+  setTheme(theme: ThemeInput): Promise<void>;
+  /** Ask the AI for new settings, avoiding these labels. */
+  generateThemes(avoid: string[]): Promise<Theme[]>;
   start(): Promise<void>;
   advance(): Promise<void>;
   restart(): Promise<void>;
@@ -187,6 +189,10 @@ export const useGame = create<GameState>((set, get) => {
     },
 
     setTheme: (theme) => request("room:setTheme", { theme }).catch(fail),
+    generateThemes(avoid) {
+      get().connect();
+      return requestWithin<Theme[]>(45_000, "themes:generate", { avoid }).catch(fail);
+    },
     start: () => request("game:start").catch(fail),
     advance: () => request("game:advance").catch(fail),
     restart: () => request("game:restart").catch(fail),

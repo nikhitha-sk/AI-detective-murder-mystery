@@ -11,7 +11,8 @@ Lobby -> Briefing -> Interrogation x3 -> Discussion -> Accusation vote -> Reveal
 | Feature | Where |
 |---|---|
 | Rooms (6-character code, 2-6 players, host starts) and solo mode | `apps/server/src/game/engine.ts`, `apps/web/src/app/page.tsx` |
-| Generated cases from a theme (1920s manor, college fest, startup office), validated with Zod, rule-checked, and verified by an independent **solver agent** (regenerated up to 3 times) | `apps/server/src/case/*` |
+| Generated cases from a setting (six built in: 1920s manor, college fest, startup office, hill station hotel, film premiere, election night newsroom), validated with Zod, rule-checked, and verified by an independent **solver agent** (regenerated up to 3 times) | `apps/server/src/case/*` |
+| **Generate new settings**: a button at the end of the setting picker asks the AI for 3 fresh settings, as often as you like (kept in your browser) | `case/themes.ts`, `ThemePicker.tsx`, `lib/themes.ts` |
 | Interrogation: public or private questions, in-character replies that stay consistent with earlier statements | `apps/server/src/agents/*` |
 | Suspect behaviour: alibis, red-herring secrets for innocents, lies from the killer, a **stress level** that rises under evidence and makes slips more likely | `apps/server/src/game/rules.ts`, `agents/prompts.ts` |
 | Evidence board: clues unlock each round; present a clue to a suspect | `Interrogation.tsx` |
@@ -140,9 +141,10 @@ npm run start      # runs the server and the built web app
 | `LLM_PROVIDER` | `auto` | `auto` uses Groq if `GROQ_API_KEY` is set, else Claude if `ANTHROPIC_API_KEY` is set, otherwise mock. Force with `groq` / `anthropic` / `mock` |
 | `GROQ_API_KEY` | (empty) | Your Groq API key (free at https://console.groq.com/keys) |
 | `ANTHROPIC_API_KEY` | (empty) | Your Claude API key |
-| `MODEL_MAIN` | Groq: `openai/gpt-oss-120b`, Claude: `claude-opus-5-5` | Case generation and solver |
+| `MODEL_MAIN` | Groq: `openai/gpt-oss-120b`, Claude: `claude-opus-5-5` | Case generation |
+| `MODEL_SOLVER` | Groq: `openai/gpt-oss-20b`, Claude: `claude-opus-5-5` | Fairness check on each new case. On Groq keep it different from `MODEL_MAIN`: each model has its own 8k tokens/min free-tier limit, and generation plus solving on one model overruns it |
 | `MODEL_SUSPECT` | Groq: `qwen/qwen3.8-27b`, Claude: `claude-opus-5-5` | Suspect replies |
-| `MODEL_GUARD` | Groq: `openai/gpt-oss-20b`, Claude: `claude-haiku-5-5` | Reply guard and memory summaries |
+| `MODEL_GUARD` | Groq: `openai/gpt-oss-20b`, Claude: `claude-haiku-5-5` | Reply guard, memory summaries and new settings |
 | `REDIS_URL` | `redis://localhost:56379` | Empty = in-memory store |
 | `DATABASE_URL` | `postgres://mystery:mystery@localhost:55432/mystery` | Empty = no persistence |
 | `ROUNDS`, `BRIEFING_SECONDS`, `ROUND_SECONDS`, `DISCUSSION_SECONDS`, `VOTE_SECONDS` | 3, 60, 240, 120, 60 | Phase timers. The host can also skip ahead |

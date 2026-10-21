@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { THEME_IDS } from "./themes";
+import { ThemeInputSchema, type Theme, type ThemeInput } from "./themes";
 import type {
   ChatMessage,
   NoteItem,
@@ -29,11 +29,15 @@ const code = z
 
 export const RoomCreateSchema = z.object({
   name,
-  theme: z.enum(THEME_IDS),
+  theme: ThemeInputSchema,
   solo: z.boolean().default(false),
 });
 export const RoomJoinSchema = z.object({ code, name });
-export const SetThemeSchema = z.object({ theme: z.enum(THEME_IDS) });
+export const SetThemeSchema = z.object({ theme: ThemeInputSchema });
+/** Ask the AI for fresh settings, avoiding the ones the player already has. */
+export const ThemesGenerateSchema = z.object({
+  avoid: z.array(z.string().trim().max(40)).max(60).default([]),
+});
 export const AskSchema = z.object({
   suspectId: z.string().min(1).max(8),
   text: z.string().trim().min(1).max(MAX_QUESTION_CHARS),
@@ -85,7 +89,8 @@ export interface ClientToServerEvents {
   "room:create": (input: RoomCreateInput, ack: Ack<{ code: string }>) => void;
   "room:join": (input: RoomJoinInput, ack: Ack<{ code: string }>) => void;
   "room:leave": () => void;
-  "room:setTheme": (input: { theme: string }, ack?: Ack) => void;
+  "room:setTheme": (input: { theme: ThemeInput }, ack?: Ack) => void;
+  "themes:generate": (input: { avoid: string[] }, ack: Ack<Theme[]>) => void;
   "game:start": (ack?: Ack) => void;
   "game:advance": (ack?: Ack) => void;
   "game:restart": (ack?: Ack) => void;

@@ -30,6 +30,7 @@ const EnvSchema = z.object({
   MODEL_MAIN: optionalString,
   MODEL_SUSPECT: optionalString,
   MODEL_GUARD: optionalString,
+  MODEL_SOLVER: optionalString,
   SERVER_PORT: int(4300),
   CLIENT_ORIGIN: z.string().default("http://localhost:3300"),
   REDIS_URL: optionalString,
@@ -55,13 +56,15 @@ const llmMode: "groq" | "anthropic" | "mock" =
         : "mock";
 
 /**
- * main: case generation and solver. suspect: suspect replies. guard: reply guard and summaries.
- * On Groq, free-tier limits are per model, so spreading the work over three models stretches them.
+ * main: case generation. solver: the fairness check on a new case. suspect: suspect replies.
+ * guard: reply guard, summaries and new settings.
+ * On Groq, free-tier limits are per model (8k tokens/min each), so case generation and the
+ * solver run on different models: back to back on one model they overrun its limit.
  */
 const DEFAULT_MODELS = {
-  groq: { main: "openai/gpt-oss-120b", suspect: "qwen/qwen3.8-27b", guard: "openai/gpt-oss-20b" },
-  anthropic: { main: "claude-opus-5-5", suspect: "claude-opus-5-5", guard: "claude-haiku-5-5" },
-  mock: { main: "mock", suspect: "mock", guard: "mock" },
+  groq: { main: "openai/gpt-oss-120b", solver: "openai/gpt-oss-20b", suspect: "qwen/qwen3.8-27b", guard: "openai/gpt-oss-20b" },
+  anthropic: { main: "claude-opus-5-5", solver: "claude-opus-5-5", suspect: "claude-opus-5-5", guard: "claude-haiku-5-5" },
+  mock: { main: "mock", solver: "mock", suspect: "mock", guard: "mock" },
 }[llmMode];
 
 export const config = {
@@ -71,6 +74,7 @@ export const config = {
   modelMain: env.MODEL_MAIN ?? DEFAULT_MODELS.main,
   modelSuspect: env.MODEL_SUSPECT ?? DEFAULT_MODELS.suspect,
   modelGuard: env.MODEL_GUARD ?? DEFAULT_MODELS.guard,
+  modelSolver: env.MODEL_SOLVER ?? DEFAULT_MODELS.solver,
   port: env.SERVER_PORT,
   clientOrigins: env.CLIENT_ORIGIN.split(",").map((s) => s.trim()),
   redisUrl: env.REDIS_URL,

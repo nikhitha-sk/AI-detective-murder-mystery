@@ -1,8 +1,10 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { themeInput } from "@mystery/shared";
 import { sfx } from "@/lib/sfx";
+import { allThemes, useThemeLibrary } from "@/lib/themes";
 import { useGame, useMe } from "@/store/game";
 import { ThemePicker } from "./ThemePicker";
 import { Button, Panel, Spinner, cx } from "./ui";
@@ -14,6 +16,14 @@ export function Lobby() {
   const me = useMe();
   const [starting, setStarting] = useState(false);
   const isHost = me?.isHost ?? false;
+  const library = useThemeLibrary();
+  const loadLibrary = library.load;
+  useEffect(loadLibrary, [loadLibrary]);
+
+  async function generateMore() {
+    const fresh = await library.generate().catch(() => []);
+    if (fresh[0]) await setTheme(themeInput(fresh[0])).catch(() => {});
+  }
 
   return (
     <div className="mx-auto grid max-w-5xl gap-5 lg:grid-cols-[1.4fr_1fr]">
@@ -24,7 +34,14 @@ export function Lobby() {
               The last case couldn&apos;t be made fair: {view.generation.message}
             </p>
           )}
-          <ThemePicker value={view.theme} disabled={!isHost} onChange={(t) => setTheme(t).catch(() => {})} />
+          <ThemePicker
+            themes={allThemes(library.generated, view.themeInfo)}
+            value={view.theme}
+            disabled={!isHost}
+            onChange={(t) => setTheme(themeInput(t)).catch(() => {})}
+            onGenerate={isHost ? () => void generateMore() : undefined}
+            generating={library.generating}
+          />
           <div className="mt-6 flex flex-wrap items-center gap-4">
             {isHost ? (
               <Button

@@ -1,4 +1,4 @@
-import type { ChatMessage, RevealPayload, RoomView } from "@mystery/shared";
+import { themeById, type ChatMessage, type RevealPayload, type RoomView } from "@mystery/shared";
 import { beforeEach, describe, expect, it } from "vitest";
 import type { GameRules } from "../src/config";
 import { GameEngine } from "../src/game/engine";
@@ -55,7 +55,7 @@ const lastState = (sent: Sent[]) => [...sent].reverse().find((s) => s.event === 
 async function startedGame(theme = "manor-1920s", players = ["alice-0001", "bob-00001"]) {
   const ctx = setup();
   const [host, ...rest] = players;
-  const code = await ctx.engine.createRoom(host, "Alice", theme, players.length === 1);
+  const code = await ctx.engine.createRoom(host, "Alice", themeById(theme), players.length === 1);
   for (const p of rest) await ctx.engine.joinRoom(p, "Bob", code);
   await ctx.engine.start(code, host);
   await until(async () => (await ctx.engine.getRoom(code))?.machine.value === "briefing");
@@ -110,7 +110,7 @@ describe("game engine (mock LLM, in-memory store)", () => {
 
   it("enforces the per-round question budget", async () => {
     const solo = setup({ questionsPerRound: 2 });
-    const code = await solo.engine.createRoom("carol-0001", "Carol", "college-fest", true);
+    const code = await solo.engine.createRoom("carol-0001", "Carol", themeById("college-fest"), true);
     await solo.engine.start(code, "carol-0001");
     await until(async () => (await solo.engine.getRoom(code))?.machine.value === "briefing");
     await solo.engine.advance(code, "carol-0001");

@@ -6,6 +6,7 @@ import {
   CASE_SYSTEM,
   GUARD_SYSTEM,
   SOLVER_SYSTEM,
+  THEMES_SYSTEM,
   caseUserPrompt,
   guardUserPrompt,
   solverUserPrompt,
@@ -13,7 +14,9 @@ import {
   suspectStatePrompt,
   suspectSystemPrompt,
   suspectUserPrompt,
+  themesUserPrompt,
 } from "../agents/prompts";
+import { ThemeIdeasSchema } from "../case/themes";
 import { usageFrom } from "./pricing";
 import type { CaseRequest, GuardInput, GuardVerdict, LlmProvider, SolverInput, Statement, SuspectTurn } from "./types";
 
@@ -62,7 +65,7 @@ export class AnthropicProvider implements LlmProvider {
 
   constructor(
     apiKey: string | undefined,
-    private models: { main: string; suspect: string; guard: string },
+    private models: { main: string; suspect: string; guard: string; solver: string },
   ) {
     this.client = new Anthropic(apiKey ? { apiKey } : {});
   }
@@ -86,7 +89,7 @@ export class AnthropicProvider implements LlmProvider {
 
   async solve(input: SolverInput) {
     const message = await this.client.beta.messages.create({
-      model: this.models.main,
+      model: this.models.solver,
       max_tokens: 16000,
       ...FALLBACK,
       output_config: { effort: "medium", format: betaZodOutputFormat(SolverOutputSchema) },
@@ -95,7 +98,7 @@ export class AnthropicProvider implements LlmProvider {
     });
     return {
       result: parseJson(message, SolverOutputSchema),
-      usage: [usageFrom(this.models.main, message.usage)],
+      usage: [usageFrom(this.models.solver, message.usage)],
     };
   }
 
@@ -142,5 +145,16 @@ export class AnthropicProvider implements LlmProvider {
       messages: [{ role: "user", content: summaryPrompt(name, statements, previous) }],
     });
     return { summary: textOf(message), usage: [usageFrom(this.models.guard, message.usage)] };
+  }
+
+  async generateThemes(avoid: string[], count: number) {
+    const message = await this.client.beta.messages.create({
+      model: this.models.guard,
+      max_tokens: 4000,
+      output_config: { effort: "low", format: betaZodOutputFormat(ThemeIdeasSchema) },
+      system: THEMES_SYSTEM,
+      messages: [{ role: "user", content: themesUserPrompt(avoid, count) }],
+    });
+    return { ideas: parseJson(message, ThemeIdeasSchema).settings, usage: [usageFrom(this.models.guard, message.usage)] };
   }
 }

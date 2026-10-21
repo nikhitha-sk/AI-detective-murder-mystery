@@ -1,7 +1,7 @@
-import type { SuspectSlice } from "@mystery/shared";
+import { sceneOf, type SuspectSlice } from "@mystery/shared";
 import { distinctiveNameTokens, mentions } from "../case/names";
 import { MOCK_CASES } from "./mockCases";
-import type { CaseRequest, GuardInput, LlmProvider, SolverInput, Statement, SuspectTurn, Usage } from "./types";
+import type { CaseRequest, GuardInput, LlmProvider, SolverInput, Statement, SuspectTurn, ThemeIdea, Usage } from "./types";
 
 /**
  * Offline provider: hand-written cases and rule-based suspects. No network,
@@ -10,6 +10,25 @@ import type { CaseRequest, GuardInput, LlmProvider, SolverInput, Statement, Susp
  */
 
 const NO_USAGE: Usage[] = [];
+
+/** Hand-written cases exist for three settings; any other setting reuses the one with the same backdrop. */
+const MOCK_CASE_FOR_SCENE = { manor: "manor-1920s", fest: "college-fest", office: "startup-office" } as const;
+
+/** Offline "generated" settings. */
+const MOCK_THEMES: ThemeIdea[] = [
+  { label: "Snowbound Ski Lodge", blurb: "A blizzard seals the chalet and the lift operator swears no one left.", scene: "manor" },
+  { label: "Royal Wedding Eve", blurb: "Palace rehearsals, a missing heirloom and a groom with cold feet.", scene: "manor" },
+  { label: "Midnight Express", blurb: "A sleeper train stalls in a mountain pass with one compartment locked.", scene: "manor" },
+  { label: "Lighthouse Reunion", blurb: "Old classmates, one storm and a keeper's log with a page torn out.", scene: "manor" },
+  { label: "Monsoon Food Festival", blurb: "Street stalls, a cook-off grudge and a judge who never tasted dessert.", scene: "fest" },
+  { label: "Cricket Final After-Party", blurb: "A trophy, a betting rumour and a dressing room nobody admits entering.", scene: "fest" },
+  { label: "Garba Night", blurb: "Nine nights of dance, a rival troupe and a costume trunk left unlocked.", scene: "fest" },
+  { label: "Comic Convention", blurb: "Cosplay crowds, a rare first edition and a panel that ran very late.", scene: "fest" },
+  { label: "Space Agency Launch", blurb: "Countdown at dawn, a leaked telemetry file and a locked control room.", scene: "office" },
+  { label: "Hospital Night Shift", blurb: "A short-staffed ward, a swapped chart and a surgeon off the rota.", scene: "office" },
+  { label: "Podcast Studio", blurb: "A live true-crime episode turns real when the host misses her cue.", scene: "office" },
+  { label: "Museum After Hours", blurb: "A gala for a new exhibit, a dead curator and a forged catalogue.", scene: "office" },
+];
 
 function pick<T>(items: T[], seed: number): T {
   return items[Math.abs(seed) % items.length];
@@ -113,7 +132,7 @@ export class MockProvider implements LlmProvider {
   readonly mode = "mock" as const;
 
   async generateCase(req: CaseRequest) {
-    const base = MOCK_CASES[req.theme] ?? Object.values(MOCK_CASES)[0];
+    const base = MOCK_CASES[req.theme] ?? MOCK_CASES[MOCK_CASE_FOR_SCENE[sceneOf(req.theme)]];
     return { raw: structuredClone(base) as unknown, usage: NO_USAGE };
   }
 
@@ -148,5 +167,14 @@ export class MockProvider implements LlmProvider {
   async summarize(name: string, statements: Statement[], previous: string) {
     const recent = statements.map((s) => `asked "${s.question}", ${name} said "${s.reply}"`).join(" ");
     return { summary: `${previous} ${recent}`.trim().slice(-1200), usage: NO_USAGE };
+  }
+
+  async generateThemes(avoid: string[], count: number) {
+    const taken = new Set(avoid.map((a) => a.toLowerCase()));
+    const fresh = MOCK_THEMES.filter((t) => !taken.has(t.label.toLowerCase()));
+    // Once the list is used up, offer remixed labels so the button never comes back empty.
+    const pool = fresh.length >= count ? fresh : MOCK_THEMES.map((t) => ({ ...t, label: `${t.label} ${Math.floor(Math.random() * 90 + 10)}` }));
+    const ideas = [...pool].sort(() => Math.random() - 0.5).slice(0, count);
+    return { ideas, usage: NO_USAGE };
   }
 }

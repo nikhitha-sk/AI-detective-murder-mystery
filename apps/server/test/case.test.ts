@@ -1,4 +1,4 @@
-import { CaseFileSchema } from "@mystery/shared";
+import { CaseFileSchema, themeById } from "@mystery/shared";
 import { describe, expect, it } from "vitest";
 import { suspectSystemPrompt } from "../src/agents/prompts";
 import { generateCase } from "../src/case/generator";
@@ -55,7 +55,7 @@ describe("solver and generator", () => {
       calls++;
       return { result: { suspectId: "s1", confidence: 1, reasoning: "wrong" }, usage: [] };
     };
-    await expect(generateCase(llm, "manor-1920s", { rounds: 3, maxAttempts: 3 })).rejects.toThrow(/after 3 attempts/);
+    await expect(generateCase(llm, themeById("manor-1920s"), { rounds: 3, maxAttempts: 3 })).rejects.toThrow(/after 3 attempts/);
     expect(calls).toBe(3);
   });
 });

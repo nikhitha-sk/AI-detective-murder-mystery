@@ -38,7 +38,8 @@ Design rules:
 export function caseUserPrompt(req: CaseRequest): string {
   const ids = Array.from({ length: req.suspectCount }, (_, i) => `s${i + 1}`).join(", ");
   const lines = [
-    `Theme: ${req.themeLabel}`,
+    // Generated settings come from players' clients, so they are treated as data like any player text.
+    `Theme: ${sanitizePlayerText(req.themeLabel)}${req.themeBlurb ? ` - ${sanitizePlayerText(req.themeBlurb)}` : ""}`,
     `Suspects: exactly ${req.suspectCount}, with ids ${ids}.`,
     `The killer must be ${req.killerId} (set killerId to "${req.killerId}").`,
     `Clue ids: c1, c2, ... Each clue's round is 1, 2 or 3.`,
@@ -53,6 +54,22 @@ export function caseUserPrompt(req: CaseRequest): string {
     );
   }
   return lines.join("\n");
+}
+
+export const THEMES_SYSTEM = `You invent settings for a murder mystery party game. Each setting is a place and an occasion where 4-5 people with tangled relationships spend one evening together and someone is murdered.
+- label: 2-4 words, a punchy name for the setting (e.g. "Snowbound Ski Lodge", "Royal Wedding Eve").
+- blurb: one vivid sentence under 110 characters that sets the mood and hints at tension. No character names.
+- scene: the backdrop that fits best: "manor" (old, grand or historic interiors, stormy nights), "fest" (stages, crowds, lights, parties, outdoor events), "office" (modern workplaces, labs, studios, screens).
+- Make every setting clearly different from the others and from the ones to avoid: vary era, country, profession and mood. PG-13.`;
+
+export function themesUserPrompt(avoid: string[], count: number): string {
+  return [
+    `Invent ${count} new settings.`,
+    avoid.length ? `Do not repeat or closely resemble these: ${avoid.map((a) => sanitizePlayerText(a)).join("; ")}.` : "",
+    `Seed for variety: ${Math.random().toString(36).slice(2, 8)}.`,
+  ]
+    .filter(Boolean)
+    .join("\n");
 }
 
 export const SOLVER_SYSTEM = `You are a sharp detective checking whether a murder mystery is solvable.

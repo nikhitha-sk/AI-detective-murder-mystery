@@ -1,4 +1,5 @@
 import type { TimelineEvent } from "./case";
+import type { Theme } from "./themes";
 
 /** Views of game state that are safe to send to players. */
 
@@ -85,6 +86,8 @@ export interface RoomView {
   code: string;
   hostId: string;
   theme: string;
+  /** The full setting, so every player can draw it (generated settings aren't built in). */
+  themeInfo: Theme;
   solo: boolean;
   phase: Phase;
   round: number;

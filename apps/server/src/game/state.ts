@@ -1,4 +1,4 @@
-import type { GenerationStatus } from "@mystery/shared";
+import type { GenerationStatus, Theme } from "@mystery/shared";
 import type { Statement } from "../llm/types";
 import type { PhaseState } from "./machine";
 
@@ -14,6 +14,8 @@ export interface RoomState {
   code: string;
   hostId: string;
   theme: string;
+  /** The full setting. Missing on rooms saved before generated settings existed. */
+  themeInfo?: Theme;
   solo: boolean;
   createdAt: number;
   players: PlayerState[];

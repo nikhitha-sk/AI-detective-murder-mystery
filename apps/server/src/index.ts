@@ -8,7 +8,9 @@ import {
   RoomCreateSchema,
   RoomJoinSchema,
   SetThemeSchema,
+  ThemesGenerateSchema,
   VoteSchema,
+  resolveTheme,
   type Ack,
   type ClientToServerEvents,
   type ServerToClientEvents,
@@ -21,11 +23,15 @@ import { config } from "./config";
 import { createPersistence } from "./db";
 import { GameEngine, GameError } from "./game/engine";
 import { createLlm } from "./llm";
+import { RateLimitError } from "./llm/types";
 import { LockTimeoutError, RedisStore, createStore } from "./store";
 
 type GameSocket = Socket<ClientToServerEvents, ServerToClientEvents, Record<string, never>, SocketData>;
 
 const PLAYER_ID = /^[A-Za-z0-9_-]{8,64}$/;
+/** Seconds between "generate new settings" requests per player. */
+const THEMES_COOLDOWN_S = 4;
+const lastThemesAt = new Map<string, number>();
 
 const store = await createStore(config.redisUrl);
 const db = await createPersistence(config.databaseUrl);
@@ -39,7 +45,9 @@ const httpServer = createServer((req, res) => {
         ok: true,
         llmMode: llm.mode,
         models:
-          llm.mode === "mock" ? null : { main: config.modelMain, suspect: config.modelSuspect, guard: config.modelGuard },
+          llm.mode === "mock"
+            ? null
+            : { main: config.modelMain, solver: config.modelSolver, suspect: config.modelSuspect, guard: config.modelGuard },
         redis: store instanceof RedisStore,
         postgres: db.enabled,
       }),
@@ -77,6 +85,7 @@ function errorMessage(err: unknown): string {
   if (err instanceof GameError) return err.message;
   if (err instanceof ZodError) return err.issues[0]?.message ?? "Invalid input.";
   if (err instanceof LockTimeoutError) return "The server is busy, please try again.";
+  if (err instanceof RateLimitError) return `The AI is busy (free-tier rate limit). Try again in ${Math.max(5, err.retryAfterS)}s.`;
   console.error("[socket] unexpected error:", err);
   return "Something went wrong on the server.";
 }
@@ -121,7 +130,7 @@ io.on("connection", (socket: GameSocket) => {
       socket,
       async () => {
         const { name, theme, solo } = RoomCreateSchema.parse(input);
-        const code = await engine.createRoom(playerId, name, theme, solo);
+        const code = await engine.createRoom(playerId, name, resolveTheme(theme), solo);
         await enterRoom(code);
         return { code };
       },
@@ -153,7 +162,20 @@ io.on("connection", (socket: GameSocket) => {
   );
 
   socket.on("room:setTheme", (input, ack) =>
-    handle(socket, async () => engine.setTheme(currentRoom(socket), playerId, SetThemeSchema.parse(input).theme), ack),
+    handle(socket, async () => engine.setTheme(currentRoom(socket), playerId, resolveTheme(SetThemeSchema.parse(input).theme)), ack),
+  );
+  socket.on("themes:generate", (input, ack) =>
+    handle(
+      socket,
+      async () => {
+        const { avoid } = ThemesGenerateSchema.parse(input);
+        const wait = (lastThemesAt.get(playerId) ?? 0) + THEMES_COOLDOWN_S * 1000 - Date.now();
+        if (wait > 0) throw new GameError(`One moment - new settings are on the way in ${Math.ceil(wait / 1000)}s.`);
+        lastThemesAt.set(playerId, Date.now());
+        return engine.generateThemes(avoid);
+      },
+      ack,
+    ),
   );
   socket.on("game:start", (ack) => handle(socket, async () => engine.start(currentRoom(socket), playerId), ack));
   socket.on("game:advance", (ack) => handle(socket, async () => engine.advance(currentRoom(socket), playerId), ack));

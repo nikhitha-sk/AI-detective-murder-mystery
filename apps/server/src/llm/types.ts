@@ -76,11 +76,29 @@ export interface SolverResult {
 export interface CaseRequest {
   theme: string;
   themeLabel: string;
+  themeBlurb: string;
   suspectCount: number;
   killerId: string;
   seeds: { motives: string[]; cause: string; nameStyle: string };
   /** Problems found in the previous attempt, fed back on a retry. */
   feedback: string[];
+}
+
+/** Raw setting ideas from the model; case/themes.ts validates them and assigns ids. */
+export interface ThemeIdea {
+  label: string;
+  blurb: string;
+  scene: string;
+}
+
+/** Every model the provider could use is rate limited for longer than the caller is willing to wait. */
+export class RateLimitError extends Error {
+  constructor(
+    message: string,
+    readonly retryAfterS: number,
+  ) {
+    super(message);
+  }
 }
 
 export interface LlmProvider {
@@ -91,4 +109,6 @@ export interface LlmProvider {
   suspectReply(turn: SuspectTurn): Promise<{ text: string; refused: boolean; usage: Usage[] }>;
   guard(input: GuardInput): Promise<{ verdict: GuardVerdict; usage: Usage[] }>;
   summarize(name: string, statements: Statement[], previous: string): Promise<{ summary: string; usage: Usage[] }>;
+  /** Fresh settings for the setting picker, avoiding the labels given. */
+  generateThemes(avoid: string[], count: number): Promise<{ ideas: ThemeIdea[]; usage: Usage[] }>;
 }
